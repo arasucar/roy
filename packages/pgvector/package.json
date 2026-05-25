@@ -1,0 +1,30 @@
+{
+  "name": "@roy/pgvector",
+  "version": "0.1.0",
+  "description": "Roy — pgvector storage + semantic compaction adapter.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@roy/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "pg": "^8.11.0",
+    "pgvector": "^0.2.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0",
+    "@types/pg": "^8.11.0"
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "name": "@roy/core",
+  "version": "0.1.0",
+  "description": "Roy — TypeScript LLM chat library core. Multi-provider, rolling compaction, multi-agent, plan mode.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./providers": {
+      "import": "./dist/providers/index.js",
+      "types": "./dist/providers/index.d.ts"
+    },
+    "./agents": {
+      "import": "./dist/agents/index.js",
+      "types": "./dist/agents/index.d.ts"
+    },
+    "./cost": {
+      "import": "./dist/cost/index.js",
+      "types": "./dist/cost/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "zod": "^3.23.0",
+    "eventemitter3": "^5.0.1"
+  },
+  "peerDependencies": {
+    "@anthropic-ai/sdk": "^0.24.0",
+    "openai": "^4.47.0",
+    "@google/generative-ai": "^0.14.0"
+  },
+  "peerDependenciesMeta": {
+    "@anthropic-ai/sdk": { "optional": true },
+    "openai": { "optional": true },
+    "@google/generative-ai": { "optional": true }
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0",
+    "vitest": "^1.6.0"
+  }
+}
