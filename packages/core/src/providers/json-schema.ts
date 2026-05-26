@@ -1,4 +1,6 @@
 import type { z } from 'zod'
+import { zodToJsonSchema } from 'zod-to-json-schema'
+import type { JsonSchema7Type } from 'zod-to-json-schema'
 
 export interface ObjectJsonSchema extends Record<string, unknown> {
   type: 'object'
@@ -6,54 +8,35 @@ export interface ObjectJsonSchema extends Record<string, unknown> {
   required: string[]
 }
 
-// Minimal Zod -> JSON Schema conversion for OpenAI-compatible tool definitions.
+// OpenAI-compatible tool parameters are JSON Schema objects. Keep the public
+// helper normalized so providers don't leak converter-specific top-level fields.
 export function zodToObjectJsonSchema(schema: z.ZodTypeAny): ObjectJsonSchema {
-  const shapeDef = (
-    schema as {
-      _def?: {
-        shape?: Record<string, unknown> | (() => Record<string, unknown>)
-      }
-    }
-  )._def?.shape
-  const shape = typeof shapeDef === 'function' ? shapeDef() : (shapeDef ?? {})
-  const properties: Record<string, unknown> = {}
-  const required: string[] = []
+  const converted = zodToJsonSchema(schema, {
+    target: 'jsonSchema7',
+    $refStrategy: 'none',
+  }) as JsonSchema7Type & Record<string, unknown>
 
-  for (const [key, value] of Object.entries(shape)) {
-    const def = (value as { _def?: { typeName?: string } })._def
-    const unwrapped = unwrapZodDef(value)
-    properties[key] = { type: zodTypeName(unwrapped) }
-    if (
-      !def?.typeName?.includes('Optional') &&
-      !def?.typeName?.includes('Default')
-    ) {
-      required.push(key)
-    }
+  if (converted.type !== 'object') {
+    throw new Error('[Roy] Tool parameters must be a z.object(...) schema.')
   }
 
-  return { type: 'object', properties, required }
-}
+  const {
+    $schema: _schema,
+    definitions: _definitions,
+    type: _type,
+    properties,
+    required,
+    ...rest
+  } = converted
 
-function unwrapZodDef(value: unknown): { typeName?: string } | undefined {
-  let current = value as { _def?: { typeName?: string; innerType?: unknown } }
-  while (
-    current._def?.innerType !== undefined &&
-    (current._def.typeName?.includes('Optional') ||
-      current._def.typeName?.includes('Default') ||
-      current._def.typeName?.includes('Nullable'))
-  ) {
-    current = current._def.innerType as {
-      _def?: { typeName?: string; innerType?: unknown }
-    }
+  return {
+    ...rest,
+    type: 'object',
+    properties: isRecord(properties) ? properties : {},
+    required: Array.isArray(required) ? required : [],
   }
-  return current._def
 }
 
-function zodTypeName(def: { typeName?: string } | undefined): string {
-  const name: string = def?.typeName ?? ''
-  if (name.includes('String')) return 'string'
-  if (name.includes('Number')) return 'number'
-  if (name.includes('Boolean')) return 'boolean'
-  if (name.includes('Array')) return 'array'
-  return 'string'
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

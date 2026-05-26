@@ -63,6 +63,37 @@ describe('buildAnthropicTools', () => {
     expect(out[2]!.cache_control).toEqual({ type: 'ephemeral' })
   })
 
+  it('uses the shared JSON Schema converter for nested input schemas', () => {
+    const out = buildAnthropicTools(
+      [
+        {
+          name: 'search',
+          description: 'Search docs',
+          parameters: z.object({
+            query: z.string().describe('Search query'),
+            tags: z.array(z.string()).default([]),
+          }),
+          execute: async () => null,
+        },
+      ],
+      false,
+    )
+
+    expect(out[0]!.input_schema).toMatchObject({
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        query: { type: 'string', description: 'Search query' },
+        tags: {
+          type: 'array',
+          items: { type: 'string' },
+          default: [],
+        },
+      },
+      required: ['query'],
+    })
+  })
+
   it('returns [] for no tools', () => {
     expect(buildAnthropicTools(undefined, true)).toEqual([])
     expect(buildAnthropicTools([], true)).toEqual([])

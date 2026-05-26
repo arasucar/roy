@@ -106,6 +106,9 @@ type GeminiSchemaType =
 
 interface GeminiSchema {
   type: GeminiSchemaType
+  description?: string
+  nullable?: boolean
+  enum?: string[]
   properties?: Record<string, GeminiSchema>
   items?: GeminiSchema
   required?: string[]
@@ -278,39 +281,122 @@ function jsonSchemaToGeminiSchema(schema: ObjectJsonSchema): GeminiSchema {
 
 function jsonSchemaPropertyToGeminiSchema(value: unknown): GeminiSchema {
   const schema = value as {
-    type?: string
+    type?: string | string[]
+    description?: string
+    enum?: string[]
     properties?: Record<string, unknown>
     items?: unknown
     required?: string[]
+    anyOf?: unknown[]
   }
-  const type = jsonSchemaTypeToGeminiType(schema.type)
-  const out: GeminiSchema = { type }
+  const normalized = normalizeJsonSchemaProperty(schema)
+  const out: GeminiSchema = { type: normalized.type }
 
-  if (schema.properties !== undefined) {
+  if (normalized.nullable) {
+    out.nullable = true
+  }
+  if (normalized.description !== undefined) {
+    out.description = normalized.description
+  }
+  if (normalized.enum !== undefined) {
+    out.enum = normalized.enum
+  }
+
+  if (normalized.properties !== undefined) {
     out.properties = Object.fromEntries(
-      Object.entries(schema.properties).map(([key, child]) => [
+      Object.entries(normalized.properties).map(([key, child]) => [
         key,
         jsonSchemaPropertyToGeminiSchema(child),
       ]),
     )
   }
-  if (schema.items !== undefined) {
-    out.items = jsonSchemaPropertyToGeminiSchema(schema.items)
+  if (normalized.items !== undefined) {
+    out.items = jsonSchemaPropertyToGeminiSchema(normalized.items)
   }
-  if (schema.required !== undefined && schema.required.length > 0) {
-    out.required = schema.required
+  if (normalized.required !== undefined && normalized.required.length > 0) {
+    out.required = normalized.required
   }
 
   return out
 }
 
-function jsonSchemaTypeToGeminiType(type: string | undefined): GeminiSchemaType {
-  if (type === 'number') return 'NUMBER'
-  if (type === 'integer') return 'INTEGER'
-  if (type === 'boolean') return 'BOOLEAN'
-  if (type === 'array') return 'ARRAY'
-  if (type === 'object') return 'OBJECT'
+function normalizeJsonSchemaProperty(schema: {
+  type?: string | string[]
+  description?: string
+  enum?: string[]
+  properties?: Record<string, unknown>
+  items?: unknown
+  required?: string[]
+  anyOf?: unknown[]
+}): {
+  type: GeminiSchemaType
+  nullable: boolean
+  description?: string
+  enum?: string[]
+  properties?: Record<string, unknown>
+  items?: unknown
+  required?: string[]
+} {
+  const variants = schema.anyOf
+    ?.filter(isRecord)
+    .filter((item) => item.type !== 'null')
+  const fallback = variants?.[0]
+  const rawType = schemaTypeValue(fallback?.type) ?? schema.type
+  const nullable =
+    (Array.isArray(schema.type) && schema.type.includes('null')) ||
+    schema.anyOf?.some((item) => isRecord(item) && item.type === 'null') === true
+
+  return {
+    type: jsonSchemaTypeToGeminiType(rawType),
+    nullable,
+    ...(schema.description !== undefined
+      ? { description: schema.description }
+      : {}),
+    ...(Array.isArray(schema.enum) ? { enum: schema.enum } : {}),
+    ...(fallback?.properties !== undefined
+      ? { properties: fallback.properties as Record<string, unknown> }
+      : schema.properties !== undefined
+        ? { properties: schema.properties }
+        : {}),
+    ...(fallback?.items !== undefined
+      ? { items: fallback.items }
+      : schema.items !== undefined
+        ? { items: schema.items }
+        : {}),
+    ...(fallback?.required !== undefined
+      ? { required: Array.isArray(fallback.required) ? fallback.required : [] }
+      : schema.required !== undefined
+        ? { required: schema.required }
+        : {}),
+  }
+}
+
+function jsonSchemaTypeToGeminiType(
+  type: string | string[] | undefined,
+): GeminiSchemaType {
+  const normalized = Array.isArray(type)
+    ? type.find((item) => item !== 'null')
+    : type
+  if (normalized === 'number') return 'NUMBER'
+  if (normalized === 'integer') return 'INTEGER'
+  if (normalized === 'boolean') return 'BOOLEAN'
+  if (normalized === 'array') return 'ARRAY'
+  if (normalized === 'object') return 'OBJECT'
   return 'STRING'
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function schemaTypeValue(
+  value: unknown,
+): string | string[] | undefined {
+  if (typeof value === 'string') return value
+  if (Array.isArray(value) && value.every((item) => typeof item === 'string')) {
+    return value
+  }
+  return undefined
 }
 
 function readGeminiText(chunk: GeminiStreamChunkLike): string {

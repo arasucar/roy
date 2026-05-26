@@ -1,5 +1,6 @@
 import type { LLMProvider, SendOptions } from './types.js'
 import type { StreamChunk, Message } from '../types/message.js'
+import { zodToObjectJsonSchema } from './json-schema.js'
 import { generateId } from '../utils/id.js'
 
 // Lazy import — only required if user installs @anthropic-ai/sdk
@@ -223,7 +224,7 @@ export function buildAnthropicTools(
     const def: AnthropicToolDef = {
       name: t.name,
       description: t.description,
-      input_schema: zodToJsonSchema(t.parameters),
+      input_schema: zodToObjectJsonSchema(t.parameters),
     }
     // Anthropic treats a cache_control breakpoint as "everything up to and
     // including this item is cached" — so attaching it to the LAST tool
@@ -242,31 +243,4 @@ export function buildAnthropicSystem(
   if (!systemPrompt) return undefined
   if (!enableCaching) return systemPrompt
   return [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }]
-}
-
-// Minimal Zod → JSON Schema conversion for tool definitions
-function zodToJsonSchema(schema: import('zod').ZodTypeAny): AnthropicInputSchema {
-  // In production use zod-to-json-schema package for full coverage
-  const shape = (schema as { _def?: { shape?: () => Record<string, unknown> } })._def?.shape?.() ?? {}
-  const properties: Record<string, unknown> = {}
-  const required: string[] = []
-
-  for (const [key, value] of Object.entries(shape)) {
-    const def = (value as { _def?: { typeName?: string } })._def
-    properties[key] = { type: zodTypeName(def) }
-    if (!def?.typeName?.includes('Optional')) {
-      required.push(key)
-    }
-  }
-
-  return { type: 'object', properties, required }
-}
-
-function zodTypeName(def: { typeName?: string } | undefined): string {
-  const name: string = def?.typeName ?? ''
-  if (name.includes('String')) return 'string'
-  if (name.includes('Number')) return 'number'
-  if (name.includes('Boolean')) return 'boolean'
-  if (name.includes('Array')) return 'array'
-  return 'string'
 }

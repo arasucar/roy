@@ -25,9 +25,14 @@ const searchTool: ToolDefinition = {
   name: 'search',
   description: 'Search docs',
   parameters: z.object({
-    query: z.string(),
-    limit: z.number().optional(),
+    query: z.string().describe('Search query'),
+    limit: z.number().int().optional(),
     includeDrafts: z.boolean().default(false),
+    metadata: z
+      .object({
+        owner: z.string().nullable(),
+      })
+      .optional(),
   }),
   execute: async () => null,
 }
@@ -86,9 +91,16 @@ describe('buildGeminiTools', () => {
             parameters: {
               type: 'OBJECT',
               properties: {
-                query: { type: 'STRING' },
-                limit: { type: 'NUMBER' },
+                query: { type: 'STRING', description: 'Search query' },
+                limit: { type: 'INTEGER' },
                 includeDrafts: { type: 'BOOLEAN' },
+                metadata: {
+                  type: 'OBJECT',
+                  properties: {
+                    owner: { type: 'STRING', nullable: true },
+                  },
+                  required: ['owner'],
+                },
               },
               required: ['query'],
             },
