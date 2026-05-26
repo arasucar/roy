@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
-import type { PlanDocument, PlanStep } from '@roy/core'
-import { CostCalculator } from '@roy/core'
+import type { PlanDocument, PlanStep } from '@chatroy/core'
+import { CostCalculator } from '@chatroy/core'
 
 export interface PlanApprovalProps {
   plan: PlanDocument
@@ -15,9 +15,9 @@ export interface PlanApprovalProps {
  * PlanApproval — renders a PlanDocument as a review card.
  * The user can approve, reject, or reject with a reason.
  *
- * Wire this to Roy's `plan-ready` event:
+ * Wire this to Roy's explicit approval events:
  * ```tsx
- * roy.on('plan-ready', ({ plan }) => setCurrentPlan(plan))
+ * roy.on('approval-requested', ({ plan }) => setCurrentPlan(plan))
  * ```
  */
 export function PlanApproval({ plan, onApprove, onReject, className }: PlanApprovalProps) {
