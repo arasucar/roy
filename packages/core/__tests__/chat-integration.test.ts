@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import { createChat } from '../src/index.js'
-import type { StreamChunk } from '../src/types/message.js'
+import type { Message, StreamChunk } from '../src/types/message.js'
 import type { ToolDefinition } from '../src/types/tool.js'
 
 function openRouterResponse(chunks: string[]) {
@@ -18,6 +18,20 @@ function openRouterResponse(chunks: string[]) {
 
 function mockOpenRouterStream(chunks: string[]) {
   return vi.spyOn(globalThis, 'fetch').mockResolvedValue(openRouterResponse(chunks))
+}
+
+function costedMessage(role: 'user' | 'assistant', text: string): Message {
+  return {
+    id: `${role}-${text.slice(0, 8)}`,
+    role,
+    content: [{ type: 'text', text }],
+    createdAt: '2026-05-26T00:00:00Z',
+    cost: {
+      promptTokens: 250,
+      completionTokens: 0,
+      estimatedCostUsd: 0,
+    },
+  }
 }
 
 afterEach(() => {
@@ -216,5 +230,63 @@ describe('createChat OpenRouter integration', () => {
     expect(session?.messages[3]?.role).toBe('assistant')
     expect(session?.cumulativeTokens).toBe(37)
     expect(session?.cumulativeCostUsd).toBeCloseTo(0.0000087, 10)
+  })
+
+  it('honors an agent sliding compaction strategy before sending', async () => {
+    const fetchSpy = mockOpenRouterStream([
+      'data: {"choices":[{"delta":{"content":"Compacted reply"}}]}\n\n',
+      'data: {"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":2}}\n\n',
+      'data: [DONE]\n\n',
+    ])
+
+    const roy = createChat({
+      agents: [
+        {
+          id: 'assistant',
+          name: 'Assistant',
+          provider: {
+            type: 'openrouter',
+            apiKey: 'test-key',
+          },
+          model: 'openai/gpt-4o-mini',
+          systemPrompt: 'Be concise.',
+          compaction: {
+            strategy: 'sliding',
+            batchSize: 2,
+            watermarkTokens: 500,
+            toolTruncation: false,
+          },
+        },
+      ],
+    })
+
+    let session = await roy.newSession('assistant')
+    for (const text of ['one '.repeat(2_000), 'two '.repeat(2_000), 'three', 'four']) {
+      const role = session.messages.length % 2 === 0 ? 'user' : 'assistant'
+      session = await roy.sessions.appendMessage(session, costedMessage(role, text))
+    }
+
+    const emitted: StreamChunk[] = []
+    for await (const chunk of roy.send({ sessionId: session.id, input: 'continue' })) {
+      emitted.push(chunk)
+    }
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+    expect(emitted.at(-1)?.type).toBe('done')
+
+    const compacted = await roy.loadSession(session.id)
+    expect(compacted?.messages.map((m) => m.role)).toEqual([
+      'user',
+      'assistant',
+      'user',
+      'assistant',
+    ])
+    expect(compacted?.messages[0]?.content[0]).toMatchObject({ type: 'text', text: 'three' })
+    expect(compacted?.messages[1]?.content[0]).toMatchObject({ type: 'text', text: 'four' })
+    expect(compacted?.messages[2]?.content[0]).toMatchObject({ type: 'text', text: 'continue' })
+    expect(compacted?.messages[3]?.content[0]).toMatchObject({
+      type: 'text',
+      text: 'Compacted reply',
+    })
   })
 })

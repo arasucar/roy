@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { RollingCompactor, type CompactionEvent } from '../src/context/rolling.js'
+import { SummarizationStrategy } from '../src/context/summarization.js'
 import type { LLMProvider } from '../src/providers/types.js'
 import type { ChatSession } from '../src/types/session.js'
 import type { Message, StreamChunk } from '../src/types/message.js'
@@ -163,6 +164,39 @@ describe('RollingCompactor — escalation order', () => {
     expect(rolloverFired).toBe(true)
     // No `compacted` events should have fired since the strategy gave up.
     expect(events.length).toBe(0)
+  })
+})
+
+describe('SummarizationStrategy', () => {
+  it('respects an explicit batchSize over the default batchRatio', async () => {
+    const strategy = new SummarizationStrategy({
+      provider: fakeProvider({ summaryDelta: 'batched summary' }),
+      model: 'openai/gpt-4o-mini',
+      batchSize: 3,
+    })
+    const messages = [
+      textMsg('user', 'one'),
+      textMsg('assistant', 'two'),
+      textMsg('user', 'three'),
+      textMsg('assistant', 'four'),
+      textMsg('user', 'five'),
+      textMsg('assistant', 'six'),
+    ]
+
+    const result = await strategy.compact(messages, {
+      session: session(100, messages),
+      currentTokens: 100,
+      contextWindowSize: 128_000,
+      passCount: 0,
+    })
+
+    const summary = result?.messages.find((m) => m.content[0]?.type === 'summary')
+    expect(summary?.content[0]).toMatchObject({
+      type: 'summary',
+      text: 'batched summary',
+      replacedCount: 3,
+    })
+    expect(result?.messages).toHaveLength(4)
   })
 })
 

@@ -1,5 +1,6 @@
 import type { ToolDefinition } from './tool.js'
 import type { CompactionStrategyDescriptor } from '../context/types.js'
+import type { ToolOutputTruncateConfig } from '../context/truncate.js'
 import type { ProviderConfig } from './provider.js'
 
 // ─── Cycle configuration ─────────────────────────────────────────────────────
@@ -86,16 +87,39 @@ export interface CompactionConfig {
   strategy?: 'rolling' | 'sliding' | CompactionStrategyDescriptor
 
   /**
+   * Trigger compaction when the session reaches this fraction of the model's
+   * usable input budget. Default: 0.6.
+   */
+  triggerFraction?: number
+
+  /**
+   * Try to compact below this fraction of the model's usable input budget.
+   * Default: 0.4.
+   */
+  targetFraction?: number
+
+  /**
+   * Tokens reserved for the next assistant response. Default: 8_192.
+   */
+  reserveOutputTokens?: number
+
+  /**
    * Token watermark at which rolling compaction fires.
    * Default: 20_000
    */
   watermarkTokens?: number
 
   /**
-   * Number of messages to summarize per compaction pass.
+   * Number of messages to summarize per compaction pass. When strategy is
+   * 'sliding', this becomes the number of recent messages to keep.
    * Default: half of the current conversation (oldest half).
    */
   batchSize?: number
+
+  /**
+   * Model to use for summaries. Defaults to the agent's model.
+   */
+  summaryModel?: string
 
   /**
    * Custom prompt used when summarizing old messages.
@@ -114,6 +138,12 @@ export interface CompactionConfig {
    * ```
    */
   summaryPrompt?: string
+
+  /**
+   * Cheap-first truncation for large tool_result blocks before summary/sliding
+   * compaction. Set to false to disable.
+   */
+  toolTruncation?: ToolOutputTruncateConfig | false
 
   /**
    * Maximum number of compaction passes before triggering a session rollover.

@@ -1,14 +1,23 @@
 import EventEmitter from 'eventemitter3'
-import type { AgentDefinition } from './types/agent.js'
+import type { AgentDefinition, CompactionConfig } from './types/agent.js'
 import type { Message, StreamChunk } from './types/message.js'
 import type { ChatSession, StorageAdapter } from './types/session.js'
 import type { MemoryConfig } from './types/memory.js'
-import type { CompactionEvent, SessionRolloverEvent } from './context/rolling.js'
+import type { LLMProvider } from './providers/types.js'
+import type {
+  CompactionEvent,
+  RollingCompactorConfig,
+  SessionRolloverEvent,
+} from './context/rolling.js'
+import type { CompactionStrategy, CompactionStrategyDescriptor } from './context/types.js'
 import { AgentRegistry } from './agents/registry.js'
 import { Orchestrator } from './agents/orchestrator.js'
 import { SessionManager } from './session/manager.js'
 import { MemoryStore } from './session/stores/memory-store.js'
 import { RollingCompactor } from './context/rolling.js'
+import { SlidingWindowStrategy } from './context/sliding.js'
+import { SummarizationStrategy } from './context/summarization.js'
+import { defaultStrategyRegistry } from './context/types.js'
 import { MemoryExtractor, InMemoryMemoryStore } from './context/memory-extractor.js'
 import { CostCalculator } from './cost/calculator.js'
 import type { CostCalculatorConfig } from './cost/calculator.js'
@@ -163,24 +172,7 @@ export class Roy extends EventEmitter<RoyEvents> {
     // Get or create the compactor for this session
     let compactor = this.compactors.get(session.id)
     if (!compactor) {
-      const compactionConfig = agent.compaction ?? {}
-      compactor = new RollingCompactor({
-        // Pass watermarkTokens through ONLY if the agent set it explicitly —
-        // otherwise the new % watermark (triggerFraction/targetFraction)
-        // computes a model-aware budget. Defaulting to a flat 20k would
-        // either waste 90% of a 200k Sonnet window or OOM an 8k local model.
-        ...(compactionConfig.watermarkTokens !== undefined
-          ? { watermarkTokens: compactionConfig.watermarkTokens }
-          : {}),
-        ...(compactionConfig.maxCompactionPasses !== undefined
-          ? { maxPasses: compactionConfig.maxCompactionPasses }
-          : {}),
-        ...(compactionConfig.summaryPrompt !== undefined
-          ? { summaryPrompt: compactionConfig.summaryPrompt }
-          : {}),
-        provider,
-        summaryModel: agent.model,
-      })
+      compactor = createRollingCompactor(agent, provider)
 
       compactor.on('compacted', (e) => this.emit('compacted', e))
       compactor.on('session-rollover', async (e) => {
@@ -372,4 +364,111 @@ export class Roy extends EventEmitter<RoyEvents> {
  */
 export function createChat(config: RoyConfig): Roy {
   return new Roy(config)
+}
+
+function createRollingCompactor(agent: AgentDefinition, provider: LLMProvider): RollingCompactor {
+  const compaction = agent.compaction ?? {}
+  const summaryModel = compaction.summaryModel ?? agent.model
+  const config: RollingCompactorConfig = { provider, summaryModel }
+
+  if (compaction.triggerFraction !== undefined) config.triggerFraction = compaction.triggerFraction
+  if (compaction.targetFraction !== undefined) config.targetFraction = compaction.targetFraction
+  if (compaction.reserveOutputTokens !== undefined) {
+    config.reserveOutputTokens = compaction.reserveOutputTokens
+  }
+  // Pass watermarkTokens through ONLY if the agent set it explicitly —
+  // otherwise the % watermark computes a model-aware budget.
+  if (compaction.watermarkTokens !== undefined) config.watermarkTokens = compaction.watermarkTokens
+  if (compaction.maxCompactionPasses !== undefined) {
+    config.maxPasses = compaction.maxCompactionPasses
+  }
+  if (compaction.summaryPrompt !== undefined) config.summaryPrompt = compaction.summaryPrompt
+  if (compaction.batchSize !== undefined) config.summaryBatchSize = compaction.batchSize
+  if (compaction.toolTruncation !== undefined) config.toolTruncation = compaction.toolTruncation
+
+  const strategy = resolveCompactionStrategy(compaction, provider, summaryModel)
+  if (strategy) config.strategy = strategy
+
+  return new RollingCompactor(config)
+}
+
+function resolveCompactionStrategy(
+  compaction: CompactionConfig,
+  provider: LLMProvider,
+  model: string,
+): CompactionStrategy | undefined {
+  if (!compaction.strategy || compaction.strategy === 'rolling') return undefined
+
+  if (compaction.strategy === 'sliding') {
+    return new SlidingWindowStrategy({
+      ...(compaction.batchSize !== undefined ? { keepLastN: compaction.batchSize } : {}),
+    })
+  }
+
+  const builtIn = createBuiltInDescriptorStrategy(compaction.strategy, provider, model)
+  if (builtIn) return builtIn
+
+  const registered = defaultStrategyRegistry.get(compaction.strategy.descriptorId)
+  if (!registered) {
+    throw new Error(
+      `[Roy] Unknown compaction strategy descriptor: "${compaction.strategy.descriptorId}".`,
+    )
+  }
+  return registered
+}
+
+function createBuiltInDescriptorStrategy(
+  descriptor: CompactionStrategyDescriptor,
+  provider: LLMProvider,
+  model: string,
+): CompactionStrategy | undefined {
+  if (descriptor.descriptorId === 'sliding-window') {
+    const keepLastN = numberConfig(descriptor.config, 'keepLastN')
+    const preserveSystem = booleanConfig(descriptor.config, 'preserveSystem')
+    const config: { keepLastN?: number; preserveSystem?: boolean } = {}
+    if (keepLastN !== undefined) config.keepLastN = keepLastN
+    if (preserveSystem !== undefined) config.preserveSystem = preserveSystem
+    return new SlidingWindowStrategy(config)
+  }
+
+  if (descriptor.descriptorId === 'summarization') {
+    const summaryPrompt = stringConfig(descriptor.config, 'summaryPrompt')
+    const batchRatio = numberConfig(descriptor.config, 'batchRatio')
+    const batchSize = numberConfig(descriptor.config, 'batchSize')
+    const minMessages = numberConfig(descriptor.config, 'minMessages')
+    return new SummarizationStrategy({
+      provider,
+      model: stringConfig(descriptor.config, 'model') ?? model,
+      ...(summaryPrompt !== undefined ? { summaryPrompt } : {}),
+      ...(batchRatio !== undefined ? { batchRatio } : {}),
+      ...(batchSize !== undefined ? { batchSize } : {}),
+      ...(minMessages !== undefined ? { minMessages } : {}),
+    })
+  }
+
+  return undefined
+}
+
+function numberConfig(
+  config: Record<string, unknown> | undefined,
+  key: string,
+): number | undefined {
+  const value = config?.[key]
+  return typeof value === 'number' ? value : undefined
+}
+
+function stringConfig(
+  config: Record<string, unknown> | undefined,
+  key: string,
+): string | undefined {
+  const value = config?.[key]
+  return typeof value === 'string' ? value : undefined
+}
+
+function booleanConfig(
+  config: Record<string, unknown> | undefined,
+  key: string,
+): boolean | undefined {
+  const value = config?.[key]
+  return typeof value === 'boolean' ? value : undefined
 }

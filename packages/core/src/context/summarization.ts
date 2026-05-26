@@ -37,6 +37,11 @@ export interface SummarizationConfig {
    */
   batchRatio?: number | undefined
   /**
+   * Exact number of messages (from the oldest) to summarize per pass.
+   * Takes precedence over batchRatio when provided.
+   */
+  batchSize?: number | undefined
+  /**
    * Minimum messages required before attempting summarization.
    * Default: 4
    */
@@ -59,6 +64,7 @@ export class SummarizationStrategy implements CompactionStrategy {
 
   private readonly summaryPrompt: string
   private readonly batchRatio: number
+  private readonly batchSize: number | undefined
   private readonly minMessages: number
   private provider: LLMProvider | undefined
   private model: string | undefined
@@ -66,6 +72,8 @@ export class SummarizationStrategy implements CompactionStrategy {
   constructor(config: SummarizationConfig = {}) {
     this.summaryPrompt = config.summaryPrompt ?? DEFAULT_SUMMARY_PROMPT
     this.batchRatio = config.batchRatio ?? 0.5
+    this.batchSize =
+      config.batchSize !== undefined ? Math.max(1, Math.floor(config.batchSize)) : undefined
     this.minMessages = config.minMessages ?? 4
     this.provider = config.provider
     this.model = config.model
@@ -94,7 +102,10 @@ export class SummarizationStrategy implements CompactionStrategy {
       (m) => m.role !== 'system' && !m.content.some((b) => b.type === 'summary'),
     )
 
-    const batchSize = Math.max(2, Math.floor(compactable.length * this.batchRatio))
+    const batchSize = Math.min(
+      compactable.length,
+      this.batchSize ?? Math.max(2, Math.floor(compactable.length * this.batchRatio)),
+    )
     const toSummarize = compactable.slice(0, batchSize)
     const remaining = compactable.slice(batchSize)
 

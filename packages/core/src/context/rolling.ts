@@ -53,6 +53,8 @@ export interface RollingCompactorConfig {
   summaryModel?: string | undefined
   /** Custom summary prompt */
   summaryPrompt?: string | undefined
+  /** Exact number of oldest messages to summarize per pass. */
+  summaryBatchSize?: number | undefined
 }
 
 export interface CompactionEvent {
@@ -133,6 +135,7 @@ export class RollingCompactor extends EventEmitter<RollingCompactorEvents> {
         provider: config.provider,
         model: config.summaryModel,
         summaryPrompt: config.summaryPrompt,
+        ...(config.summaryBatchSize !== undefined ? { batchSize: config.summaryBatchSize } : {}),
       })
 
     this.truncationStrategy =
