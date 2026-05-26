@@ -62,6 +62,7 @@ export class OpenRouterProvider implements LLMProvider {
     let fullText = ''
     let promptTokens = 0
     let completionTokens = 0
+    let emittedUsage = false
     const toolState = new Map<number, OpenRouterToolState>()
 
     let buffered = ''
@@ -78,6 +79,7 @@ export class OpenRouterProvider implements LLMProvider {
         if (chunk.type === 'usage') {
           promptTokens = chunk.promptTokens
           completionTokens = chunk.completionTokens
+          emittedUsage = true
         }
         yield chunk
       }
@@ -89,12 +91,15 @@ export class OpenRouterProvider implements LLMProvider {
         if (chunk.type === 'usage') {
           promptTokens = chunk.promptTokens
           completionTokens = chunk.completionTokens
+          emittedUsage = true
         }
         yield chunk
       }
     }
 
-    yield { type: 'usage', promptTokens, completionTokens }
+    if (!emittedUsage) {
+      yield { type: 'usage', promptTokens, completionTokens }
+    }
     yield {
       type: 'done',
       message: {

@@ -175,6 +175,7 @@ describe('OpenRouterProvider.stream', () => {
       promptTokens: 12,
       completionTokens: 3,
     })
+    expect(emitted.filter((c) => c.type === 'usage')).toHaveLength(1)
     expect(emitted.at(-1)?.type).toBe('done')
   })
 })
