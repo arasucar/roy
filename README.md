@@ -18,6 +18,8 @@ storage, and UI surface; Roy handles the orchestration around them.
 
 Published npm packages use the `@chatroy/*` scope.
 
+Current release: `0.2.0`.
+
 | Package                                    | Purpose                                                                                                                 |
 | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
 | [`@chatroy/core`](./packages/core)         | Chat runtime, provider adapters, sessions, tools, compaction, memory, agents, plan mode, and cost tracking.             |
@@ -399,6 +401,27 @@ React package is intentionally thin; the core runtime is the main package.
 Roy is the right fit when the hard part of your app is not "how do I stream a
 message?" but "how do I keep an agent useful after the conversation, tool
 results, user preferences, and cost history all start accumulating?"
+
+## Upgrading To 0.2.0
+
+Roy `0.2.0` is the first release after the public repo/package cleanup. The
+important changes are mostly around API clarity:
+
+- Use `@chatroy/*` everywhere. The repo metadata, examples, workspace
+  dependencies, and CI now match the published npm scope.
+- Plan mode is explicit. Use `roy.requestPlan(sessionId)` or
+  `send({ sessionId, input, requestPlan: true })`, then listen for
+  `approval-requested`. Roy does not infer approval gates from assistant prose.
+- Treat run events as the host-app lifecycle contract. Prefer
+  `agent-start`, `tool-call`, `tool-result`, `handoff`, `approval-requested`,
+  `cost-updated`, `done`, and `error` over parsing streamed text.
+- Keep durable workflow orchestration in your app. Roy validates handoffs and
+  packages context; your host owns retries, pause/resume/cancel, event logs,
+  approvals, and UI supervision.
+- `@chatroy/pgvector` now includes `PgVectorStore` for embedding storage and
+  similarity search. Session and memory persistence remain JSONB-backed.
+
+See [CHANGELOG.md](./CHANGELOG.md) for the full release notes.
 
 ## Monorepo Development
 

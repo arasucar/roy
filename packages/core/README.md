@@ -5,6 +5,8 @@ streaming, tool calls, rolling context compaction, memory extraction, explicit
 plan approval, handoff context primitives, host-app run events, and cost
 tracking.
 
+Current release: `0.2.0`.
+
 ## Install
 
 ```bash
@@ -82,6 +84,21 @@ await roy.requestPlan(sessionId)
 ```
 
 Roy does not watch for `[PLAN_READY]` or any other text heuristic.
+
+## Run Events
+
+Roy emits typed events for host supervision and UI state:
+
+- `agent-start` / `agent-end`
+- `tool-call` / `tool-result`
+- `handoff`
+- `plan-ready` / `approval-requested` / `plan-approved` / `plan-rejected`
+- `cost-updated`
+- `done`
+- `error`
+
+Prefer these events over parsing assistant text when building logs, approval
+surfaces, or workflow state machines.
 
 ## Handoffs
 

@@ -1,6 +1,6 @@
 {
   "name": "@chatroy/react",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Roy — React UI components (shadcn/ui) for the Roy LLM chat library.",
   "license": "MIT",
   "author": "Aras Ucar",

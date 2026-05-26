@@ -6,21 +6,18 @@ Roy publishes three public npm packages:
 - `@chatroy/react`
 - `@chatroy/pgvector`
 
+Current release target: `0.2.0`.
+
 ## Release Checklist
 
 1. Confirm the working tree contains only intended release changes.
-2. Run:
+2. Confirm all publishable package manifests use the same version:
 
    ```bash
-   pnpm --filter @chatroy/core test
-   pnpm typecheck
-   pnpm lint
-   pnpm audit --prod
-   pnpm pack -r --dry-run
-   git diff --check
+   node -e "for (const p of ['packages/core/package.json','packages/react/package.json','packages/pgvector/package.json']) console.log(p, require('./' + p).version)"
    ```
 
-3. Confirm package names and versions:
+3. Confirm npm still has the previous version:
 
    ```bash
    npm view @chatroy/core version
@@ -28,11 +25,35 @@ Roy publishes three public npm packages:
    npm view @chatroy/pgvector version
    ```
 
-4. Publish from a clean, tagged commit when possible.
-5. Publish with npm 2FA:
+4. Run the release preflight:
+
+   ```bash
+   pnpm test
+   pnpm typecheck
+   pnpm lint
+   pnpm format:check
+   pnpm audit --prod
+   pnpm pack -r --dry-run
+   git diff --check
+   ```
+
+5. Commit the release prep.
+6. Tag the release:
+
+   ```bash
+   git tag v0.2.0
+   ```
+
+7. Publish with npm 2FA:
 
    ```bash
    pnpm publish -r --access public --otp <code>
+   ```
+
+8. Push the commit and tag:
+
+   ```bash
+   git push origin main --follow-tags
    ```
 
 ## Recommended Future Setup

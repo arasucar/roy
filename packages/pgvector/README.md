@@ -2,6 +2,8 @@
 
 PostgreSQL and pgvector storage adapters for Roy.
 
+Current release: `0.2.0`.
+
 This package includes:
 
 - `PgSessionStore`: JSONB-backed Roy session persistence.
@@ -48,6 +50,8 @@ const memoryStore = new PgMemoryStore({
 ```
 
 ## Vector Store
+
+`PgVectorStore` is available starting in `0.2.0`.
 
 ```ts
 import { PgVectorStore } from '@chatroy/pgvector'

@@ -2,6 +2,8 @@
 
 React components for Roy chat applications.
 
+Current release: `0.2.0`.
+
 ## Install
 
 ```bash
@@ -29,6 +31,10 @@ import {
 - `SessionRolloverAlert`: session rollover callout.
 - `PlanApproval`: renders a Roy `PlanDocument` from `approval-requested` for
   approval or rejection.
+
+`PlanApproval` is intentionally presentational. Keep approval state in your host
+app, set the active plan when Roy emits `approval-requested`, then resolve your
+agent's `onPlanApproval` callback from the user's approve/reject action.
 
 ## Example
 

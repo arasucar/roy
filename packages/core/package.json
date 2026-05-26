@@ -1,6 +1,6 @@
 {
   "name": "@chatroy/core",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Roy — TypeScript LLM chat library core. Multi-provider, rolling compaction, multi-agent, plan mode.",
   "license": "MIT",
   "author": "Aras Ucar",
