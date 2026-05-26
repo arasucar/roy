@@ -348,8 +348,8 @@ export class Roy extends EventEmitter<RoyEvents> {
  *     {
  *       id: 'assistant',
  *       name: 'Assistant',
- *       provider: { type: 'anthropic', apiKey: process.env.ANTHROPIC_API_KEY! },
- *       model: 'claude-sonnet-4-6',
+ *       provider: { type: 'openrouter', apiKey: process.env.OPENROUTER_API_KEY! },
+ *       model: 'openai/gpt-4o-mini',
  *       systemPrompt: 'You are a helpful assistant.',
  *       compaction: { watermarkTokens: 20_000 },
  *     },

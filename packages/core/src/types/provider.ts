@@ -4,7 +4,7 @@ export interface AnthropicConfig {
   type: 'anthropic'
   apiKey: string
   baseUrl?: string
-  /** Default: 'claude-sonnet-4-6' — overridden by AgentDefinition.model */
+  /** Optional app-level default. Roy sends AgentDefinition.model for each turn. */
   defaultModel?: string
 }
 
@@ -35,6 +35,8 @@ export interface OllamaConfig {
 export interface OpenRouterConfig {
   type: 'openrouter'
   apiKey: string
+  /** Suggested default: 'openai/gpt-4o-mini' — overridden by AgentDefinition.model */
+  defaultModel?: string
   /** Fallback model if the primary fails */
   fallbackModel?: string
   /** App name sent in X-Title header */

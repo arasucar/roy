@@ -50,11 +50,11 @@ describe('RollingCompactor — % watermark', () => {
       targetFraction: 0.4,
       reserveOutputTokens: 8192,
       provider: fakeProvider(),
-      summaryModel: 'claude-sonnet-4-6',
+      summaryModel: 'openai/gpt-4o-mini',
       toolTruncation: false,
     })
     const before = session(1000, [textMsg('user', 'hi')])
-    const after = await c.maybeCompact(before, fakeProvider(), 'claude-sonnet-4-6')
+    const after = await c.maybeCompact(before, fakeProvider(), 'openai/gpt-4o-mini')
     expect(after).toBe(before)
   })
 
@@ -64,10 +64,10 @@ describe('RollingCompactor — % watermark', () => {
       triggerFraction: 0.6,
       targetFraction: 0.4,
       provider: fakeProvider(),
-      summaryModel: 'claude-sonnet-4-6',
+      summaryModel: 'openai/gpt-4o-mini',
       toolTruncation: false,
     })
-    const budget = c.budget(fakeProvider(), 'claude-sonnet-4-6')
+    const budget = c.budget(fakeProvider(), 'openai/gpt-4o-mini')
     expect(budget.triggerAt).toBeGreaterThan(100_000)
     expect(budget.triggerAt).toBeLessThan(120_000)
     const before = session(budget.triggerAt + 100, [
@@ -78,7 +78,7 @@ describe('RollingCompactor — % watermark', () => {
     ])
     const events: CompactionEvent[] = []
     c.on('compacted', (e) => events.push(e))
-    await c.maybeCompact(before, fakeProvider(), 'claude-sonnet-4-6')
+    await c.maybeCompact(before, fakeProvider(), 'openai/gpt-4o-mini')
     expect(events.some((e) => e.step === 'summarized')).toBe(true)
   })
 
@@ -86,10 +86,10 @@ describe('RollingCompactor — % watermark', () => {
     const c = new RollingCompactor({
       watermarkTokens: 5_000,
       provider: fakeProvider(),
-      summaryModel: 'claude-sonnet-4-6',
+      summaryModel: 'openai/gpt-4o-mini',
       toolTruncation: false,
     })
-    const budget = c.budget(fakeProvider(), 'claude-sonnet-4-6')
+    const budget = c.budget(fakeProvider(), 'openai/gpt-4o-mini')
     expect(budget.triggerAt).toBe(5_000)
   })
 })
@@ -113,7 +113,7 @@ describe('RollingCompactor — escalation order', () => {
       maxPasses: 1,
       toolTruncation: false,
     })
-    const budget = c.budget(fakeProvider(), 'claude-sonnet-4-6')
+    const budget = c.budget(fakeProvider(), 'openai/gpt-4o-mini')
     const messages = [
       textMsg('user', 'a'),
       textMsg('assistant', 'b'),
@@ -125,7 +125,7 @@ describe('RollingCompactor — escalation order', () => {
     await c.maybeCompact(
       session(budget.triggerAt + 100, messages),
       fakeProvider(),
-      'claude-sonnet-4-6',
+      'openai/gpt-4o-mini',
     )
     expect(events.length).toBe(1)
     expect(events[0]!.step).toBe('summarized')
@@ -146,9 +146,9 @@ describe('RollingCompactor — escalation order', () => {
       targetFraction: 0.4,
       maxPasses: 1,
       toolTruncation: false,
-      summaryModel: 'claude-sonnet-4-6',
+      summaryModel: 'openai/gpt-4o-mini',
     })
-    const budget = c.budget(fakeProvider(), 'claude-sonnet-4-6')
+    const budget = c.budget(fakeProvider(), 'openai/gpt-4o-mini')
     const events: CompactionEvent[] = []
     let rolloverFired = false
     c.on('compacted', (e) => events.push(e))
@@ -158,7 +158,7 @@ describe('RollingCompactor — escalation order', () => {
     await c.maybeCompact(
       session(budget.triggerAt + 100, [textMsg('user', 'a'), textMsg('assistant', 'b')]),
       fakeProvider({ summaryDelta: 'rolled-over summary' }),
-      'claude-sonnet-4-6',
+      'openai/gpt-4o-mini',
     )
     expect(rolloverFired).toBe(true)
     // No `compacted` events should have fired since the strategy gave up.

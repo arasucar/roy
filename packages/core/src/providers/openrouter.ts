@@ -2,6 +2,11 @@ import type { LLMProvider, SendOptions } from './types.js'
 import type { StreamChunk, Message } from '../types/message.js'
 import { generateId } from '../utils/id.js'
 
+const CONTEXT_WINDOWS: Record<string, number> = {
+  'openai/gpt-4o-mini': 128_000,
+  'openai/gpt-4o': 128_000,
+}
+
 /**
  * OpenRouter provider — routes to any model via OpenRouter's OpenAI-compatible API.
  * Supports automatic fallback models.
@@ -122,7 +127,8 @@ export class OpenRouterProvider implements LLMProvider {
   }
 
   contextWindowSize(_model: string): number {
-    // OpenRouter serves many models — return a reasonable default
-    return 128_000
+    // OpenRouter serves many models; known defaults are model-aware and
+    // everything else falls back to a conservative common window.
+    return CONTEXT_WINDOWS[_model] ?? 128_000
   }
 }

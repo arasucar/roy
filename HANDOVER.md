@@ -136,11 +136,11 @@ const roy = createChat({
   agents: [{
     id: 'assistant',
     name: 'Assistant',
-    provider: { type: 'anthropic', apiKey: process.env.ANTHROPIC_API_KEY! },
-    model: 'claude-sonnet-4-6',
+    provider: { type: 'openrouter', apiKey: process.env.OPENROUTER_API_KEY! },
+    model: 'openai/gpt-4o-mini',
     systemPrompt: 'You are a helpful assistant.',
     // No watermarkTokens — uses the new % watermark.
-    // For a 200k Sonnet window: trigger at ~115k, target ~76k.
+    // For a 128k OpenRouter window: trigger at ~72k, target ~48k.
   }],
   cost: { onMissingModel: 'warn' },
 })

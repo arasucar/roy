@@ -120,7 +120,7 @@ export class SummarizationStrategy implements CompactionStrategy {
     if (!this.model) {
       throw new Error(
         '[Roy] SummarizationStrategy requires a model. Set compaction.summaryModel in your AgentDefinition, ' +
-        'or pass model in SummarizationConfig. Use a fast, cheap model (e.g. "gpt-4o-mini", "claude-haiku-4-5-20251001").',
+        'or pass model in SummarizationConfig. Use a fast, cheap model (e.g. "gpt-4o-mini" for OpenAI or "openai/gpt-4o-mini" for OpenRouter).',
       )
     }
 

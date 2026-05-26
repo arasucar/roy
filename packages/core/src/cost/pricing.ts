@@ -13,6 +13,27 @@ export const PRICING_AS_OF = '2026-05-26'
  * Override via CostCalculatorConfig.pricingOverrides.
  */
 export const MODEL_PRICING: ModelInfo[] = [
+  // ── OpenRouter ───────────────────────────────────────────────────────────
+  {
+    id: 'openai/gpt-4o-mini',
+    name: 'GPT-4o Mini (OpenRouter)',
+    provider: 'openrouter',
+    contextWindow: 128_000,
+    inputPricePerMillion: 0.15,
+    outputPricePerMillion: 0.6,
+    supportsToolUse: true,
+    supportsStreaming: true,
+  },
+  {
+    id: 'openai/gpt-4o',
+    name: 'GPT-4o (OpenRouter)',
+    provider: 'openrouter',
+    contextWindow: 128_000,
+    inputPricePerMillion: 2.5,
+    outputPricePerMillion: 10.0,
+    supportsToolUse: true,
+    supportsStreaming: true,
+  },
   // ── Anthropic ────────────────────────────────────────────────────────────
   {
     id: 'claude-opus-4-6',

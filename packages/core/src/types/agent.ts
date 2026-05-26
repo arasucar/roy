@@ -133,8 +133,8 @@ export interface CompactionConfig {
  * const myAgent: AgentDefinition = {
  *   id: 'support',
  *   name: 'Support Agent',
- *   provider: { type: 'anthropic', apiKey: process.env.ANTHROPIC_API_KEY },
- *   model: 'claude-opus-4-6',
+ *   provider: { type: 'openrouter', apiKey: process.env.OPENROUTER_API_KEY },
+ *   model: 'openai/gpt-4o-mini',
  *   systemPrompt: 'You are a helpful support agent for Acme Corp.',
  *   tools: [lookupOrderTool, refundTool],
  *   compaction: { watermarkTokens: 15_000 },

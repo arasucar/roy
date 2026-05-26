@@ -34,8 +34,8 @@ const roy = createChat({
     },
     {
       id: 'deep',
-      provider: { type: 'anthropic', apiKey: process.env.ANTHROPIC_KEY! },
-      model: 'claude-opus-4-6',
+      provider: { type: 'openrouter', apiKey: process.env.OPENROUTER_KEY! },
+      model: 'openai/gpt-4o',
       systemPrompt: 'You are a deep thinker.',
     },
     {
@@ -125,8 +125,8 @@ This is where most libraries fail. Context management is either manual or absent
 const roy = createChat({
   agents: [{
     id: 'assistant',
-    provider: { type: 'anthropic', apiKey: '...' },
-    model: 'claude-sonnet-4-6',
+    provider: { type: 'openrouter', apiKey: '...' },
+    model: 'openai/gpt-4o-mini',
     systemPrompt: '...',
     compaction: {
       watermarkTokens: 20_000,      // fires every 20k cumulative tokens
@@ -304,8 +304,8 @@ const roy = createChat({
   agents: [
     {
       id: 'router',
-      provider: { type: 'anthropic', apiKey: '...' },
-      model: 'claude-haiku-4-5-20251001',
+      provider: { type: 'openrouter', apiKey: '...' },
+      model: 'openai/gpt-4o-mini',
       systemPrompt: 'Classify the intent and route to the correct specialist.',
       cycle: {
         maxHops: 5,
@@ -326,8 +326,8 @@ const roy = createChat({
     },
     {
       id: 'specialist-b',
-      provider: { type: 'anthropic', apiKey: '...' },
-      model: 'claude-sonnet-4-6',
+      provider: { type: 'openrouter', apiKey: '...' },
+      model: 'openai/gpt-4o',
       systemPrompt: 'You handle technical support.',
     },
   ],
@@ -483,8 +483,8 @@ const chain = new ConversationChain({ memory: new BufferMemory({ chatHistory: hi
 ```ts
 const planningAgent: AgentDefinition = {
   id: 'planner',
-  provider: { type: 'anthropic', apiKey: '...' },
-  model: 'claude-sonnet-4-6',
+  provider: { type: 'openrouter', apiKey: '...' },
+  model: 'openai/gpt-4o',
   systemPrompt: 'You are a careful planner. Gather requirements before acting.',
   planMode: true,
   // Programmatic approval callback — works in any context (CLI, API, UI)
@@ -621,7 +621,7 @@ const session = await roy.loadSession(sessionId)
 console.log(`Session total: $${session.cumulativeCostUsd.toFixed(4)}`)
 
 // Model comparison
-const models = roy.listModels('anthropic')
+const models = roy.listModels('openrouter')
 models.forEach((m) => {
   console.log(`${m.name}: $${m.inputPricePerMillion}/M in, $${m.outputPricePerMillion}/M out`)
 })
@@ -630,7 +630,7 @@ models.forEach((m) => {
 const roy2 = createChat({
   agents: [myAgent],
   cost: {
-    pricingOverrides: { 'claude-sonnet-4-6': { inputPricePerMillion: 2.5 } },
+    pricingOverrides: { 'openai/gpt-4o-mini': { inputPricePerMillion: 0.12 } },
   },
 })
 ```

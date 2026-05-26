@@ -57,8 +57,8 @@ export interface CostSnapshot {
 /**
  * A single message in a Roy conversation.
  *
- * @typeParam TInput  - Shape of the user-facing input (defaults to string)
- * @typeParam TOutput - Shape of the assistant-facing output (defaults to string)
+ * @typeParam TInput  - Shape of the user-facing input (defaults to unknown)
+ * @typeParam TOutput - Shape of the assistant-facing output (defaults to unknown)
  *
  * @example
  * ```ts

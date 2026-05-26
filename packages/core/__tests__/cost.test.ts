@@ -4,12 +4,12 @@ import { CostCalculator } from '../src/cost/calculator.js'
 describe('CostCalculator', () => {
   it('computes input + output cost for a known model', () => {
     const c = new CostCalculator()
-    const cost = c.calculate('claude-sonnet-4-6', {
+    const cost = c.calculate('openai/gpt-4o-mini', {
       promptTokens: 1_000_000,
       completionTokens: 1_000_000,
     })
     expect(cost.pricingSource).toBe('table')
-    expect(cost.estimatedCostUsd).toBeCloseTo(18.0, 5) // 3 input + 15 output
+    expect(cost.estimatedCostUsd).toBeCloseTo(0.75, 5) // 0.15 input + 0.60 output
   })
 
   it('applies cache pricing for Anthropic when usage includes cache fields', () => {
@@ -55,10 +55,10 @@ describe('CostCalculator', () => {
   it('caller pricing overrides bundled defaults', () => {
     const c = new CostCalculator({
       pricingOverrides: {
-        'claude-sonnet-4-6': { inputPricePerMillion: 1.0, outputPricePerMillion: 2.0 },
+        'openai/gpt-4o-mini': { inputPricePerMillion: 1.0, outputPricePerMillion: 2.0 },
       },
     })
-    const cost = c.calculate('claude-sonnet-4-6', {
+    const cost = c.calculate('openai/gpt-4o-mini', {
       promptTokens: 1_000_000,
       completionTokens: 1_000_000,
     })
@@ -68,12 +68,17 @@ describe('CostCalculator', () => {
 
   it('supports the legacy positional call shape', () => {
     const c = new CostCalculator()
-    const cost = c.calculate('claude-sonnet-4-6', 1_000_000, 1_000_000)
-    expect(cost.estimatedCostUsd).toBeCloseTo(18.0, 5)
+    const cost = c.calculate('openai/gpt-4o-mini', 1_000_000, 1_000_000)
+    expect(cost.estimatedCostUsd).toBeCloseTo(0.75, 5)
   })
 
   it('exposes pricingAsOf', () => {
     const c = new CostCalculator()
     expect(c.pricingAsOf).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  })
+
+  it('lists OpenRouter models for default app configuration', () => {
+    const c = new CostCalculator()
+    expect(c.listModels('openrouter').map((m) => m.id)).toContain('openai/gpt-4o-mini')
   })
 })
