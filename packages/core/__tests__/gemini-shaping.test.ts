@@ -6,6 +6,7 @@ import {
   buildGeminiModelParams,
   buildGeminiStartChatParams,
   buildGeminiTools,
+  buildGeminiUserRequest,
   buildGeminiUserText,
   mapGeminiStreamChunk,
 } from '../src/providers/gemini.js'
@@ -50,6 +51,94 @@ describe('buildGeminiContents', () => {
       { role: 'model', parts: [{ text: 'hi' }] },
     ])
   })
+
+  it('shapes assistant tool calls and tool results as Gemini function parts', () => {
+    const out = buildGeminiContents([
+      {
+        ...msg('assistant', ''),
+        content: [
+          {
+            type: 'tool_call',
+            toolCall: {
+              id: 'tc_0',
+              name: 'search',
+              arguments: '{"query":"roy"}',
+            },
+          },
+        ],
+      },
+      {
+        ...msg('tool', ''),
+        content: [
+          {
+            type: 'tool_result',
+            toolResult: {
+              toolCallId: 'tc_0',
+              name: 'search',
+              result: { title: 'Roy docs' },
+            },
+          },
+        ],
+      },
+    ])
+
+    expect(out).toEqual([
+      {
+        role: 'model',
+        parts: [
+          {
+            functionCall: {
+              name: 'search',
+              args: { query: 'roy' },
+            },
+          },
+        ],
+      },
+      {
+        role: 'user',
+        parts: [
+          {
+            functionResponse: {
+              name: 'search',
+              response: { title: 'Roy docs' },
+            },
+          },
+        ],
+      },
+    ])
+  })
+
+  it('wraps primitive Gemini function responses in an object', () => {
+    const out = buildGeminiContents([
+      {
+        ...msg('tool', ''),
+        content: [
+          {
+            type: 'tool_result',
+            toolResult: {
+              toolCallId: 'tc_0',
+              name: 'search',
+              result: 'ok',
+            },
+          },
+        ],
+      },
+    ])
+
+    expect(out).toEqual([
+      {
+        role: 'user',
+        parts: [
+          {
+            functionResponse: {
+              name: 'search',
+              response: { result: 'ok' },
+            },
+          },
+        ],
+      },
+    ])
+  })
 })
 
 describe('buildGeminiHistory', () => {
@@ -75,6 +164,40 @@ describe('buildGeminiUserText', () => {
     ])
 
     expect(out).toBe('hello')
+  })
+})
+
+describe('buildGeminiUserRequest', () => {
+  it('uses plain text for normal user turns', () => {
+    expect(buildGeminiUserRequest([msg('user', 'hello')])).toBe('hello')
+  })
+
+  it('uses functionResponse parts for latest tool turns', () => {
+    const out = buildGeminiUserRequest([
+      msg('user', 'Find Roy docs'),
+      {
+        ...msg('tool', ''),
+        content: [
+          {
+            type: 'tool_result',
+            toolResult: {
+              toolCallId: 'tc_0',
+              name: 'search',
+              result: { title: 'Roy docs' },
+            },
+          },
+        ],
+      },
+    ])
+
+    expect(out).toEqual([
+      {
+        functionResponse: {
+          name: 'search',
+          response: { title: 'Roy docs' },
+        },
+      },
+    ])
   })
 })
 

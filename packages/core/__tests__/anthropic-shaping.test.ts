@@ -4,8 +4,10 @@ import {
   buildAnthropicMessages,
   buildAnthropicTools,
   buildAnthropicSystem,
+  mapAnthropicStreamEvent,
 } from '../src/providers/anthropic.js'
 import type { Message } from '../src/types/message.js'
+import type { StreamChunk } from '../src/types/message.js'
 import type { ToolDefinition } from '../src/types/tool.js'
 
 function msg(role: Message['role'], text: string): Message {
@@ -45,6 +47,100 @@ describe('buildAnthropicMessages', () => {
   it('no-ops cache_control with a single message', () => {
     const out = buildAnthropicMessages([msg('user', 'only one')], true)
     expect(out[0]!.content[0]!.cache_control).toBeUndefined()
+  })
+
+  it('shapes assistant tool_use blocks and user tool_result blocks for follow-up turns', () => {
+    const out = buildAnthropicMessages(
+      [
+        {
+          ...msg('assistant', ''),
+          content: [
+            {
+              type: 'tool_call',
+              toolCall: {
+                id: 'toolu_1',
+                name: 'search',
+                arguments: '{"query":"roy"}',
+              },
+            },
+          ],
+        },
+        {
+          ...msg('tool', ''),
+          content: [
+            {
+              type: 'tool_result',
+              toolResult: {
+                toolCallId: 'toolu_1',
+                name: 'search',
+                result: { title: 'Roy docs' },
+              },
+            },
+          ],
+        },
+      ],
+      false,
+    )
+
+    expect(out).toEqual([
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool_use',
+            id: 'toolu_1',
+            name: 'search',
+            input: { query: 'roy' },
+          },
+        ],
+      },
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: 'toolu_1',
+            content: '{"title":"Roy docs"}',
+          },
+        ],
+      },
+    ])
+  })
+
+  it('marks Anthropic tool_result blocks as errors when tool execution failed', () => {
+    const out = buildAnthropicMessages(
+      [
+        {
+          ...msg('tool', ''),
+          content: [
+            {
+              type: 'tool_result',
+              toolResult: {
+                toolCallId: 'toolu_1',
+                name: 'search',
+                result: { error: 'bad args' },
+                isError: true,
+              },
+            },
+          ],
+        },
+      ],
+      false,
+    )
+
+    expect(out).toEqual([
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: 'toolu_1',
+            content: '{"error":"bad args"}',
+            is_error: true,
+          },
+        ],
+      },
+    ])
   })
 })
 
@@ -107,11 +203,65 @@ describe('buildAnthropicSystem', () => {
   it('returns array form with cache_control when caching enabled', () => {
     const out = buildAnthropicSystem('be helpful', true)
     expect(Array.isArray(out)).toBe(true)
-    expect((out as Array<{ cache_control?: unknown }>)[0]!.cache_control).toEqual({
+    expect(
+      (out as Array<{ cache_control?: unknown }>)[0]!.cache_control,
+    ).toEqual({
       type: 'ephemeral',
     })
   })
   it('returns undefined when no system prompt', () => {
     expect(buildAnthropicSystem(undefined, true)).toBeUndefined()
+  })
+})
+
+describe('mapAnthropicStreamEvent', () => {
+  it('preserves Anthropic tool_use IDs and names across JSON deltas', () => {
+    const toolState = new Map()
+
+    expect(
+      mapAnthropicStreamEvent(
+        {
+          type: 'content_block_start',
+          index: 0,
+          content_block: {
+            type: 'tool_use',
+            id: 'toolu_1',
+            name: 'search',
+          },
+        },
+        toolState,
+      ),
+    ).toEqual([])
+
+    expect(
+      mapAnthropicStreamEvent(
+        {
+          type: 'content_block_delta',
+          index: 0,
+          delta: {
+            type: 'input_json_delta',
+            partial_json: '{"query"',
+          },
+        },
+        toolState,
+      ),
+    ).toEqual([
+      {
+        type: 'tool_call',
+        toolCallId: 'toolu_1',
+        toolName: 'search',
+        argumentsDelta: '{"query"',
+      },
+    ])
+  })
+
+  it('maps text deltas', () => {
+    expect(
+      mapAnthropicStreamEvent({
+        type: 'content_block_delta',
+        index: 0,
+        delta: { type: 'text_delta', text: 'hello' },
+      }),
+    ).toEqual<StreamChunk[]>([{ type: 'text', delta: 'hello' }])
   })
 })

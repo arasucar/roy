@@ -39,7 +39,9 @@ export class GeminiProvider implements LLMProvider {
     )
     const chat = model.startChat(buildGeminiStartChatParams(options))
     const result = await chat.sendMessageStream(
-      buildGeminiUserText(options.messages),
+      buildGeminiUserRequest(options.messages) as Parameters<
+        typeof chat.sendMessageStream
+      >[0],
     )
 
     let fullText = ''
@@ -91,9 +93,28 @@ interface GeminiTextPart {
   text: string
 }
 
+interface GeminiFunctionCallPart {
+  functionCall: {
+    name: string
+    args: Record<string, unknown>
+  }
+}
+
+interface GeminiFunctionResponsePart {
+  functionResponse: {
+    name: string
+    response: Record<string, unknown>
+  }
+}
+
+type GeminiPart =
+  | GeminiTextPart
+  | GeminiFunctionCallPart
+  | GeminiFunctionResponsePart
+
 interface GeminiContent {
   role: 'user' | 'model'
-  parts: GeminiTextPart[]
+  parts: GeminiPart[]
 }
 
 type GeminiSchemaType =
@@ -136,6 +157,8 @@ interface GeminiStartChatParams {
   history: GeminiContent[]
 }
 
+type GeminiUserRequest = string | GeminiPart[]
+
 interface GeminiFunctionCall {
   name: string
   args?: object
@@ -151,16 +174,11 @@ export function buildGeminiContents(messages: Message[]): GeminiContent[] {
 
   for (const msg of messages) {
     if (msg.role === 'system') continue
+    const parts = buildGeminiParts(msg)
+    if (parts.length === 0) continue
     out.push({
       role: msg.role === 'assistant' ? 'model' : 'user',
-      parts: [
-        {
-          text: msg.content
-            .filter((b): b is { type: 'text'; text: string } => b.type === 'text')
-            .map((b) => b.text)
-            .join('\n'),
-        },
-      ],
+      parts,
     })
   }
 
@@ -186,6 +204,14 @@ export function buildGeminiUserText(messages: Message[]): string {
       .map((b) => b.text)
       .join('\n') ?? ''
   )
+}
+
+export function buildGeminiUserRequest(messages: Message[]): GeminiUserRequest {
+  const last = lastNonSystemMessage(messages)
+  if (!last || last.role !== 'tool') return buildGeminiUserText(messages)
+
+  const parts = buildGeminiParts(last)
+  return parts.length > 0 ? parts : ''
 }
 
 export function buildGeminiTools(
@@ -245,6 +271,32 @@ export function mapGeminiStreamChunk(
   })
 
   return out
+}
+
+function buildGeminiParts(msg: Message): GeminiPart[] {
+  const parts: GeminiPart[] = []
+
+  for (const block of msg.content) {
+    if (block.type === 'text' || block.type === 'summary') {
+      parts.push({ text: block.text })
+    } else if (msg.role === 'assistant' && block.type === 'tool_call') {
+      parts.push({
+        functionCall: {
+          name: block.toolCall.name,
+          args: parseToolArgs(block.toolCall.arguments),
+        },
+      })
+    } else if (msg.role === 'tool' && block.type === 'tool_result') {
+      parts.push({
+        functionResponse: {
+          name: block.toolResult.name,
+          response: toFunctionResponse(block.toolResult.result),
+        },
+      })
+    }
+  }
+
+  return parts
 }
 
 function buildGeminiGenerationConfig(
@@ -405,4 +457,28 @@ function readGeminiText(chunk: GeminiStreamChunkLike): string {
   } catch {
     return ''
   }
+}
+
+function lastNonSystemMessage(messages: Message[]): Message | undefined {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index]?.role !== 'system') {
+      return messages[index]
+    }
+  }
+  return undefined
+}
+
+function parseToolArgs(input: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(input) as unknown
+    if (isRecord(parsed)) return parsed
+  } catch {
+    // Gemini requires functionCall.args to be an object.
+  }
+  return {}
+}
+
+function toFunctionResponse(result: unknown): Record<string, unknown> {
+  if (isRecord(result)) return result
+  return { result }
 }

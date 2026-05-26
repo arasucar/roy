@@ -193,6 +193,8 @@ export class Orchestrator extends EventEmitter<OrchestratorEvents> {
     const messages = [...options.messages]
     const turnMessages: Message[] = []
     const canFeedToolResults =
+      options.provider.type === 'anthropic' ||
+      options.provider.type === 'gemini' ||
       options.provider.type === 'openai' ||
       options.provider.type === 'openrouter' ||
       options.provider.type === 'ollama'
