@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import type { ModelInfo, ProviderType } from '@roy/core'
+import type { ModelInfo, ProviderType } from '@chatroy/core'
 
 export interface ModelPickerProps {
   models: ModelInfo[]

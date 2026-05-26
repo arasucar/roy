@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import type { CompactionEvent, SessionRolloverEvent } from '@roy/core'
+import type { CompactionEvent, SessionRolloverEvent } from '@chatroy/core'
 
 // ─── Compaction toast ─────────────────────────────────────────────────────────
 

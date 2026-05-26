@@ -1,13 +1,38 @@
 {
-  "name": "@roy/react",
+  "name": "@chatroy/react",
   "version": "0.1.0",
   "description": "Roy — React UI components (shadcn/ui) for the Roy LLM chat library.",
+  "license": "MIT",
+  "author": "Aras Ucar",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/arasucar/roy.git",
+    "directory": "packages/react"
+  },
+  "homepage": "https://github.com/arasucar/roy#readme",
+  "bugs": {
+    "url": "https://github.com/arasucar/roy/issues"
+  },
+  "keywords": [
+    "llm",
+    "ai",
+    "chat",
+    "react",
+    "components",
+    "typescript"
+  ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "sideEffects": false,
   "files": [
     "dist",
-    "src"
+    "src",
+    "README.md",
+    "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "exports": {
     ".": {
       "import": "./dist/index.js",
@@ -21,7 +46,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@roy/core": "workspace:*"
+    "@chatroy/core": "workspace:*"
   },
   "peerDependencies": {
     "react": "^18.0.0",

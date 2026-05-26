@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react'
-import type { Message, StreamChunk } from '@roy/core'
+import type { Message, StreamChunk } from '@chatroy/core'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

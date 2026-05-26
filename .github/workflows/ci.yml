@@ -30,7 +30,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Test core
-        run: pnpm -F @roy/core test
+        run: pnpm -F @chatroy/core test
 
       - name: Lint
         run: pnpm lint

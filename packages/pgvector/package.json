@@ -1,13 +1,41 @@
 {
-  "name": "@roy/pgvector",
+  "name": "@chatroy/pgvector",
   "version": "0.1.0",
-  "description": "Roy — pgvector storage + semantic compaction adapter.",
+  "description": "Roy — PostgreSQL JSONB stores and pgvector similarity search adapters.",
+  "license": "MIT",
+  "author": "Aras Ucar",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/arasucar/roy.git",
+    "directory": "packages/pgvector"
+  },
+  "homepage": "https://github.com/arasucar/roy#readme",
+  "bugs": {
+    "url": "https://github.com/arasucar/roy/issues"
+  },
+  "keywords": [
+    "llm",
+    "ai",
+    "agent",
+    "pgvector",
+    "postgres",
+    "vector-search",
+    "storage",
+    "memory",
+    "typescript"
+  ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "sideEffects": false,
   "files": [
     "dist",
-    "src"
+    "src",
+    "README.md",
+    "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "exports": {
     ".": {
       "import": "./dist/index.js",
@@ -18,18 +46,19 @@
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch",
     "prepack": "npm run build",
+    "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@roy/core": "workspace:*"
+    "@chatroy/core": "workspace:*"
   },
   "peerDependencies": {
-    "pg": "^8.11.0",
-    "pgvector": "^0.2.0"
+    "pg": "^8.11.0"
   },
   "devDependencies": {
     "typescript": "^5.4.0",
     "@types/node": "^20.0.0",
-    "@types/pg": "^8.11.0"
+    "@types/pg": "^8.11.0",
+    "vitest": "^1.6.0"
   }
 }
