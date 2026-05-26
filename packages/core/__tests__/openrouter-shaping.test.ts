@@ -49,6 +49,59 @@ describe('buildOpenRouterMessages', () => {
       { role: 'assistant', content: 'hi' },
     ])
   })
+
+  it('shapes assistant tool calls and tool results for follow-up turns', () => {
+    const out = buildOpenRouterMessages([
+      {
+        ...msg('assistant', ''),
+        content: [
+          {
+            type: 'tool_call',
+            toolCall: {
+              id: 'call_1',
+              name: 'search',
+              arguments: '{"query":"roy"}',
+            },
+          },
+        ],
+      },
+      {
+        ...msg('tool', ''),
+        content: [
+          {
+            type: 'tool_result',
+            toolResult: {
+              toolCallId: 'call_1',
+              name: 'search',
+              result: { title: 'Roy docs' },
+            },
+          },
+        ],
+      },
+    ])
+
+    expect(out).toEqual([
+      {
+        role: 'assistant',
+        content: null,
+        tool_calls: [
+          {
+            id: 'call_1',
+            type: 'function',
+            function: {
+              name: 'search',
+              arguments: '{"query":"roy"}',
+            },
+          },
+        ],
+      },
+      {
+        role: 'tool',
+        tool_call_id: 'call_1',
+        content: '{"title":"Roy docs"}',
+      },
+    ])
+  })
 })
 
 describe('buildOpenRouterTools', () => {

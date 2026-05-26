@@ -2,6 +2,7 @@ import EventEmitter from 'eventemitter3'
 import type { AgentDefinition } from '../types/agent.js'
 import type { Message, StreamChunk } from '../types/message.js'
 import type { ChatSession } from '../types/session.js'
+import type { ToolCall, ToolDefinition, ToolResult } from '../types/tool.js'
 import type { LLMProvider } from '../providers/types.js'
 import type { AgentRegistry } from './registry.js'
 import { CycleEngine } from './cycle-engine.js'
@@ -26,6 +27,8 @@ export interface OrchestratorEvents {
   'plan-rejected': [{ plan: import('../types/agent.js').PlanDocument }]
   error: [Error]
 }
+
+const MAX_TOOL_ITERATIONS = 5
 
 /**
  * Orchestrator — coordinates agent execution, handoffs, and plan mode.
@@ -108,17 +111,17 @@ export class Orchestrator extends EventEmitter<OrchestratorEvents> {
       let promptTokens = 0
       let completionTokens = 0
 
-      for await (const chunk of provider.stream({
-        model: agent.model,
-        systemPrompt,
+      for await (const chunk of this.streamProviderTurn({
+        provider,
+        agent: { ...agent, systemPrompt },
         messages: [...session.messages, userMessage] as Message[],
         tools,
         signal: options.signal,
       })) {
         if (chunk.type === 'text') fullText += chunk.delta
         if (chunk.type === 'usage') {
-          promptTokens = chunk.promptTokens
-          completionTokens = chunk.completionTokens
+          promptTokens += chunk.promptTokens
+          completionTokens += chunk.completionTokens
         }
         yield chunk
       }
@@ -157,16 +160,16 @@ export class Orchestrator extends EventEmitter<OrchestratorEvents> {
     let promptTokens = 0
     let completionTokens = 0
 
-    for await (const chunk of provider.stream({
-      model: agent.model,
-      systemPrompt: agent.systemPrompt,
+    for await (const chunk of this.streamProviderTurn({
+      provider,
+      agent,
       messages: [...session.messages, userMessage] as Message[],
       tools: agent.tools,
       signal: options.signal,
     })) {
       if (chunk.type === 'usage') {
-        promptTokens = chunk.promptTokens
-        completionTokens = chunk.completionTokens
+        promptTokens += chunk.promptTokens
+        completionTokens += chunk.completionTokens
       }
       yield chunk
     }
@@ -178,6 +181,103 @@ export class Orchestrator extends EventEmitter<OrchestratorEvents> {
       tokens: promptTokens + completionTokens,
       costUsd: turnCost.estimatedCostUsd,
     })
+  }
+
+  private async *streamProviderTurn(options: {
+    provider: LLMProvider
+    agent: AgentDefinition
+    messages: Message[]
+    tools?: ToolDefinition[] | undefined
+    signal?: AbortSignal | undefined
+  }): AsyncIterable<StreamChunk> {
+    const messages = [...options.messages]
+    const turnMessages: Message[] = []
+    const canFeedToolResults =
+      options.provider.type === 'openai' ||
+      options.provider.type === 'openrouter' ||
+      options.provider.type === 'ollama'
+
+    for (let iteration = 0; iteration <= MAX_TOOL_ITERATIONS; iteration += 1) {
+      const pendingToolCalls = new Map<string, ToolCall>()
+      let fullText = ''
+      let done: Extract<StreamChunk, { type: 'done' }> | undefined
+
+      for await (const chunk of options.provider.stream({
+        model: options.agent.model,
+        systemPrompt: options.agent.systemPrompt,
+        messages,
+        tools: options.tools,
+        signal: options.signal,
+      })) {
+        if (chunk.type === 'text') {
+          fullText += chunk.delta
+          yield chunk
+          continue
+        }
+        if (chunk.type === 'tool_call') {
+          mergeToolCallDelta(pendingToolCalls, chunk)
+          yield chunk
+          continue
+        }
+        if (chunk.type === 'done') {
+          done = chunk
+          continue
+        }
+
+        yield chunk
+      }
+
+      const toolCalls = [...pendingToolCalls.values()]
+      if (toolCalls.length === 0 || !canFeedToolResults) {
+        const message = done?.message ?? buildAssistantTextMessage(fullText)
+        yield {
+          type: 'done',
+          message,
+          messages: [...turnMessages, message],
+        }
+        return
+      }
+
+      if (iteration === MAX_TOOL_ITERATIONS) {
+        const error = new Error(
+          `[Roy] Tool loop exceeded ${MAX_TOOL_ITERATIONS} iterations.`,
+        )
+        yield { type: 'error', error }
+        const message = buildAssistantTextMessage(error.message)
+        yield {
+          type: 'done',
+          message,
+          messages: [...turnMessages, message],
+        }
+        return
+      }
+
+      const assistantToolMessage = buildAssistantToolMessage(
+        fullText || messageText(done?.message),
+        toolCalls,
+        options.agent.id,
+      )
+      turnMessages.push(assistantToolMessage)
+      messages.push(assistantToolMessage)
+
+      for (const toolResult of await executeToolCalls(
+        toolCalls,
+        options.tools ?? [],
+      )) {
+        const toolMessage = buildToolResultMessage(toolResult)
+        turnMessages.push(toolMessage)
+        messages.push(toolMessage)
+        yield {
+          type: 'tool_result',
+          toolCallId: toolResult.toolCallId,
+          toolName: toolResult.name,
+          result: toolResult.result,
+          ...(toolResult.isError !== undefined
+            ? { isError: toolResult.isError }
+            : {}),
+        }
+      }
+    }
   }
 
   /**
@@ -207,4 +307,123 @@ export class Orchestrator extends EventEmitter<OrchestratorEvents> {
 
     return this.registry.get(resolvedId)
   }
+}
+
+function mergeToolCallDelta(
+  pending: Map<string, ToolCall>,
+  chunk: Extract<StreamChunk, { type: 'tool_call' }>,
+): void {
+  const current = pending.get(chunk.toolCallId) ?? {
+    id: chunk.toolCallId,
+    name: chunk.toolName,
+    arguments: '',
+  }
+  pending.set(chunk.toolCallId, {
+    ...current,
+    name: chunk.toolName || current.name,
+    arguments: current.arguments + chunk.argumentsDelta,
+  })
+}
+
+async function executeToolCalls(
+  toolCalls: ToolCall[],
+  tools: ToolDefinition[],
+): Promise<ToolResult[]> {
+  return Promise.all(toolCalls.map((call) => executeToolCall(call, tools)))
+}
+
+async function executeToolCall(
+  call: ToolCall,
+  tools: ToolDefinition[],
+): Promise<ToolResult> {
+  const tool = tools.find((candidate) => candidate.name === call.name)
+  if (!tool) {
+    return toolError(call, `Tool "${call.name}" is not registered.`)
+  }
+
+  let rawInput: unknown
+  try {
+    rawInput = call.arguments.trim() ? JSON.parse(call.arguments) : {}
+  } catch (error) {
+    return toolError(call, `Invalid JSON arguments: ${errorMessage(error)}`)
+  }
+
+  const parsed = tool.parameters.safeParse(rawInput)
+  if (!parsed.success) {
+    return toolError(call, parsed.error.message)
+  }
+
+  try {
+    const result = await (tool.execute as (input: unknown) => Promise<unknown>)(
+      parsed.data,
+    )
+    return {
+      toolCallId: call.id,
+      name: call.name,
+      result,
+    }
+  } catch (error) {
+    return toolError(call, errorMessage(error))
+  }
+}
+
+function toolError(call: ToolCall, message: string): ToolResult {
+  return {
+    toolCallId: call.id,
+    name: call.name,
+    result: { error: message },
+    isError: true,
+  }
+}
+
+function buildAssistantToolMessage(
+  text: string,
+  toolCalls: ToolCall[],
+  agentId: string,
+): Message {
+  return {
+    id: generateId(),
+    role: 'assistant',
+    content: [
+      ...(text ? [{ type: 'text' as const, text }] : []),
+      ...toolCalls.map((toolCall) => ({
+        type: 'tool_call' as const,
+        toolCall,
+      })),
+    ],
+    agentId,
+    createdAt: new Date().toISOString(),
+  }
+}
+
+function buildToolResultMessage(toolResult: ToolResult): Message {
+  return {
+    id: generateId(),
+    role: 'tool',
+    content: [{ type: 'tool_result', toolResult }],
+    createdAt: new Date().toISOString(),
+  }
+}
+
+function buildAssistantTextMessage(text: string): Message {
+  return {
+    id: generateId(),
+    role: 'assistant',
+    content: [{ type: 'text', text }],
+    createdAt: new Date().toISOString(),
+  }
+}
+
+function messageText(message: Message | undefined): string {
+  return (
+    message?.content
+      .flatMap((b) =>
+        b.type === 'text' || b.type === 'summary' ? [b.text] : [],
+      )
+      .join('\n') ?? ''
+  )
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }

@@ -133,9 +133,29 @@ export class OpenRouterProvider implements LLMProvider {
 
 // ─── OpenRouter body shaping ─────────────────────────────────────────────────
 
-interface OpenRouterMessage {
-  role: 'system' | 'user' | 'assistant'
-  content: string
+type OpenRouterMessage =
+  | {
+      role: 'system' | 'user'
+      content: string
+    }
+  | {
+      role: 'assistant'
+      content: string | null
+      tool_calls?: OpenRouterAssistantToolCall[]
+    }
+  | {
+      role: 'tool'
+      tool_call_id: string
+      content: string
+    }
+
+interface OpenRouterAssistantToolCall {
+  id: string
+  type: 'function'
+  function: {
+    name: string
+    arguments: string
+  }
 }
 
 interface OpenRouterToolDef {
@@ -194,17 +214,51 @@ export function buildOpenRouterMessages(
 
   for (const msg of messages) {
     if (msg.role === 'system') continue
-    const text = msg.content
-      .filter((b): b is { type: 'text'; text: string } => b.type === 'text')
-      .map((b) => b.text)
-      .join('\n')
-    out.push({
-      role: msg.role === 'assistant' ? 'assistant' : 'user',
-      content: text,
-    })
+    out.push(...buildOpenRouterMessage(msg))
   }
 
   return out
+}
+
+function buildOpenRouterMessage(msg: Message): OpenRouterMessage[] {
+  if (msg.role === 'tool') {
+    return msg.content
+      .filter((b) => b.type === 'tool_result')
+      .map((b) => ({
+        role: 'tool' as const,
+        tool_call_id: b.toolResult.toolCallId,
+        content: serializeToolResult(b.toolResult.result),
+      }))
+  }
+
+  const text = messageText(msg)
+  const toolCalls = msg.content
+    .filter((b) => b.type === 'tool_call')
+    .map((b): OpenRouterAssistantToolCall => ({
+      id: b.toolCall.id,
+      type: 'function',
+      function: {
+        name: b.toolCall.name,
+        arguments: b.toolCall.arguments,
+      },
+    }))
+
+  if (msg.role === 'assistant' && toolCalls.length > 0) {
+    return [
+      {
+        role: 'assistant',
+        content: text || null,
+        tool_calls: toolCalls,
+      },
+    ]
+  }
+
+  return [
+    {
+      role: msg.role === 'assistant' ? 'assistant' : 'user',
+      content: text,
+    },
+  ]
 }
 
 export function buildOpenRouterTools(
@@ -302,5 +356,22 @@ function* parseOpenRouterLines(
         completionTokens: parsed.usage.completion_tokens ?? 0,
       }
     }
+  }
+}
+
+function messageText(msg: Message): string {
+  return msg.content
+    .flatMap((b) =>
+      b.type === 'text' || b.type === 'summary' ? [b.text] : [],
+    )
+    .join('\n')
+}
+
+function serializeToolResult(result: unknown): string {
+  if (typeof result === 'string') return result
+  try {
+    return JSON.stringify(result)
+  } catch {
+    return String(result)
   }
 }

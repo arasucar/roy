@@ -1,18 +1,24 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { z } from 'zod'
 import { createChat } from '../src/index.js'
 import type { StreamChunk } from '../src/types/message.js'
+import type { ToolDefinition } from '../src/types/tool.js'
+
+function openRouterResponse(chunks: string[]) {
+  const encoder = new TextEncoder()
+  return new Response(
+    new ReadableStream({
+      start(controller) {
+        for (const chunk of chunks) controller.enqueue(encoder.encode(chunk))
+        controller.close()
+      },
+    }),
+  )
+}
 
 function mockOpenRouterStream(chunks: string[]) {
-  const encoder = new TextEncoder()
   return vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-    new Response(
-      new ReadableStream({
-        start(controller) {
-          for (const chunk of chunks) controller.enqueue(encoder.encode(chunk))
-          controller.close()
-        },
-      }),
-    ),
+    openRouterResponse(chunks),
   )
 }
 
@@ -106,5 +112,119 @@ describe('createChat OpenRouter integration', () => {
     expect(session?.messages[1]?.role).toBe('assistant')
     expect(session?.cumulativeTokens).toBe(120)
     expect(session?.cumulativeCostUsd).toBeCloseTo(0.000027, 10)
+  })
+
+  it('executes streamed tool calls, feeds results back, and persists the tool loop', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        openRouterResponse([
+          'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"search"}}]}}]}\n\n',
+          'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\\"query\\""}}]}}]}\n\n',
+          'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":":\\"roy\\"}"}}]}}]}\n\n',
+          'data: {"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":2}}\n\n',
+          'data: [DONE]\n\n',
+        ]),
+      )
+      .mockResolvedValueOnce(
+        openRouterResponse([
+          'data: {"choices":[{"delta":{"content":"Found Roy docs."}}]}\n\n',
+          'data: {"choices":[],"usage":{"prompt_tokens":20,"completion_tokens":5}}\n\n',
+          'data: [DONE]\n\n',
+        ]),
+      )
+
+    const searchTool: ToolDefinition = {
+      name: 'search',
+      description: 'Search docs',
+      parameters: z.object({ query: z.string() }),
+      execute: async ({ query }) => ({ title: `Docs for ${query}` }),
+    }
+
+    const roy = createChat({
+      agents: [
+        {
+          id: 'assistant',
+          name: 'Assistant',
+          provider: {
+            type: 'openrouter',
+            apiKey: 'test-key',
+          },
+          model: 'openai/gpt-4o-mini',
+          systemPrompt: 'Use tools when useful.',
+          tools: [searchTool],
+        },
+      ],
+    })
+
+    const emitted: StreamChunk[] = []
+    for await (const chunk of roy.send({ input: 'Find Roy docs' })) {
+      emitted.push(chunk)
+    }
+
+    expect(fetchSpy).toHaveBeenCalledTimes(2)
+    const secondBody = JSON.parse(fetchSpy.mock.calls[1]![1]?.body as string) as {
+      messages: Array<Record<string, unknown>>
+    }
+    expect(secondBody.messages).toMatchObject([
+      { role: 'system', content: 'Use tools when useful.' },
+      { role: 'user', content: 'Find Roy docs' },
+      {
+        role: 'assistant',
+        content: null,
+        tool_calls: [
+          {
+            id: 'call_1',
+            type: 'function',
+            function: {
+              name: 'search',
+              arguments: '{"query":"roy"}',
+            },
+          },
+        ],
+      },
+      {
+        role: 'tool',
+        tool_call_id: 'call_1',
+        content: '{"title":"Docs for roy"}',
+      },
+    ])
+
+    expect(emitted.filter((chunk) => chunk.type === 'tool_result')).toEqual([
+      {
+        type: 'tool_result',
+        toolCallId: 'call_1',
+        toolName: 'search',
+        result: { title: 'Docs for roy' },
+      },
+    ])
+    expect(
+      emitted
+        .filter(
+          (chunk): chunk is Extract<StreamChunk, { type: 'text' }> =>
+            chunk.type === 'text',
+        )
+        .map((chunk) => chunk.delta)
+        .join(''),
+    ).toBe('Found Roy docs.')
+    expect(emitted.filter((chunk) => chunk.type === 'usage')).toHaveLength(2)
+
+    const done = emitted.find(
+      (chunk): chunk is Extract<StreamChunk, { type: 'done' }> =>
+        chunk.type === 'done',
+    )
+    expect(done?.message.cost).toMatchObject({
+      promptTokens: 30,
+      completionTokens: 7,
+    })
+    expect(done?.message.cost?.estimatedCostUsd).toBeCloseTo(0.0000087, 10)
+
+    const [session] = await roy.listSessions()
+    expect(session?.messages).toHaveLength(4)
+    expect(session?.messages[1]?.content[0]?.type).toBe('tool_call')
+    expect(session?.messages[2]?.role).toBe('tool')
+    expect(session?.messages[3]?.role).toBe('assistant')
+    expect(session?.cumulativeTokens).toBe(37)
+    expect(session?.cumulativeCostUsd).toBeCloseTo(0.0000087, 10)
   })
 })

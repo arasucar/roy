@@ -10,6 +10,7 @@ export type {
   StreamChunk,
   TextChunk,
   ToolCallChunk,
+  ToolResultChunk,
   UsageChunk,
   ErrorChunk,
   DoneChunk,

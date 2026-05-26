@@ -105,9 +105,29 @@ export class OpenAIProvider implements LLMProvider {
 
 // ─── OpenAI body shaping ─────────────────────────────────────────────────────
 
-interface OpenAIMessage {
-  role: 'system' | 'user' | 'assistant'
-  content: string
+type OpenAIMessage =
+  | {
+      role: 'system' | 'user'
+      content: string
+    }
+  | {
+      role: 'assistant'
+      content: string | null
+      tool_calls?: OpenAIAssistantToolCall[]
+    }
+  | {
+      role: 'tool'
+      tool_call_id: string
+      content: string
+    }
+
+interface OpenAIAssistantToolCall {
+  id: string
+  type: 'function'
+  function: {
+    name: string
+    arguments: string
+  }
 }
 
 interface OpenAIToolDef {
@@ -165,17 +185,51 @@ export function buildOpenAIMessages(
 
   for (const msg of messages) {
     if (msg.role === 'system') continue
-    const text = msg.content
-      .filter((b): b is { type: 'text'; text: string } => b.type === 'text')
-      .map((b) => b.text)
-      .join('\n')
-    out.push({
-      role: msg.role === 'assistant' ? 'assistant' : 'user',
-      content: text,
-    })
+    out.push(...buildOpenAIMessage(msg))
   }
 
   return out
+}
+
+function buildOpenAIMessage(msg: Message): OpenAIMessage[] {
+  if (msg.role === 'tool') {
+    return msg.content
+      .filter((b) => b.type === 'tool_result')
+      .map((b) => ({
+        role: 'tool' as const,
+        tool_call_id: b.toolResult.toolCallId,
+        content: serializeToolResult(b.toolResult.result),
+      }))
+  }
+
+  const text = messageText(msg)
+  const toolCalls = msg.content
+    .filter((b) => b.type === 'tool_call')
+    .map((b): OpenAIAssistantToolCall => ({
+      id: b.toolCall.id,
+      type: 'function',
+      function: {
+        name: b.toolCall.name,
+        arguments: b.toolCall.arguments,
+      },
+    }))
+
+  if (msg.role === 'assistant' && toolCalls.length > 0) {
+    return [
+      {
+        role: 'assistant',
+        content: text || null,
+        tool_calls: toolCalls,
+      },
+    ]
+  }
+
+  return [
+    {
+      role: msg.role === 'assistant' ? 'assistant' : 'user',
+      content: text,
+    },
+  ]
 }
 
 export function buildOpenAITools(
@@ -245,4 +299,21 @@ export function mapOpenAIStreamChunk(
   }
 
   return out
+}
+
+function messageText(msg: Message): string {
+  return msg.content
+    .flatMap((b) =>
+      b.type === 'text' || b.type === 'summary' ? [b.text] : [],
+    )
+    .join('\n')
+}
+
+function serializeToolResult(result: unknown): string {
+  if (typeof result === 'string') return result
+  try {
+    return JSON.stringify(result)
+  } catch {
+    return String(result)
+  }
 }

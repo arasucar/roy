@@ -98,6 +98,14 @@ export interface ToolCallChunk {
   argumentsDelta: string
 }
 
+export interface ToolResultChunk {
+  type: 'tool_result'
+  toolCallId: string
+  toolName: string
+  result: unknown
+  isError?: boolean
+}
+
 export interface UsageChunk {
   type: 'usage'
   promptTokens: number
@@ -122,11 +130,19 @@ export interface ErrorChunk {
 export interface DoneChunk {
   type: 'done'
   message: Message
+  /**
+   * All assistant/tool messages produced internally during this turn.
+   * Usually this is just [message], but tool loops include intermediate
+   * assistant tool-call messages and tool-result messages before the final
+   * assistant answer.
+   */
+  messages?: Message[]
 }
 
 export type StreamChunk =
   | TextChunk
   | ToolCallChunk
+  | ToolResultChunk
   | UsageChunk
   | ErrorChunk
   | DoneChunk

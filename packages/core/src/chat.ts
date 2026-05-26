@@ -244,10 +244,10 @@ export class Roy extends EventEmitter<RoyEvents> {
       options.signal !== undefined ? { signal: options.signal } : {},
     )) {
       if (chunk.type === 'usage') {
-        promptTokens = chunk.promptTokens
-        completionTokens = chunk.completionTokens
-        cacheCreationInputTokens = chunk.cacheCreationInputTokens ?? 0
-        cacheReadInputTokens = chunk.cacheReadInputTokens ?? 0
+        promptTokens += chunk.promptTokens
+        completionTokens += chunk.completionTokens
+        cacheCreationInputTokens += chunk.cacheCreationInputTokens ?? 0
+        cacheReadInputTokens += chunk.cacheReadInputTokens ?? 0
       }
       if (chunk.type === 'done') {
         const turnCost = this.costCalc.calculate(agent.model, {
@@ -256,7 +256,7 @@ export class Roy extends EventEmitter<RoyEvents> {
           cacheCreationInputTokens,
           cacheReadInputTokens,
         })
-        finalMessage = {
+        const finalTurnMessage: Message = {
           ...chunk.message,
           agentId,
           cost: {
@@ -267,11 +267,25 @@ export class Roy extends EventEmitter<RoyEvents> {
             cacheReadInputTokens: turnCost.cacheReadInputTokens,
           },
         }
+        finalMessage = finalTurnMessage
+        const turnMessages = chunk.messages ?? [chunk.message]
+        const messagesToSave = turnMessages.map((message, index) => {
+          const isFinal =
+            message.id === chunk.message.id || index === turnMessages.length - 1
+          if (isFinal) return finalTurnMessage
+          if (message.role === 'assistant' && message.agentId === undefined) {
+            return { ...message, agentId }
+          }
+          return message
+        })
+
         // Save messages
         session = await this.sessions.appendMessage(session, userMessage)
-        session = await this.sessions.appendMessage(session, finalMessage)
+        for (const message of messagesToSave) {
+          session = await this.sessions.appendMessage(session, message)
+        }
 
-        yield { ...chunk, message: finalMessage }
+        yield { ...chunk, message: finalTurnMessage, messages: messagesToSave }
         continue
       }
       yield chunk
