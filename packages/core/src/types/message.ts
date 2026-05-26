@@ -65,7 +65,7 @@ export interface CostSnapshot {
  * type MyMessage = Message<{ query: string }, { answer: string; citations: string[] }>
  * ```
  */
-export interface Message<TInput = string, TOutput = string> {
+export interface Message<TInput = unknown, TOutput = unknown> {
   id: string
   role: Role
   content: ContentBlock[]

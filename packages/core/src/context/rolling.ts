@@ -17,27 +17,27 @@ export interface RollingCompactorConfig {
    * Set this OR `watermarkTokens` (legacy). If both are set, `watermarkTokens`
    * wins for backward compatibility.
    */
-  triggerFraction?: number
+  triggerFraction?: number | undefined
   /**
    * After compaction runs, try to bring usage below this fraction of the
    * usable input budget. Default 0.4. Must be < triggerFraction.
    */
-  targetFraction?: number
+  targetFraction?: number | undefined
   /**
    * Tokens held back from the context window for the next assistant response.
    * The usable input budget is `contextWindow − reserveOutputTokens`. Default 8_192.
    */
-  reserveOutputTokens?: number
+  reserveOutputTokens?: number | undefined
 
   /**
    * LEGACY: flat token watermark. When set, overrides triggerFraction and
    * triggers compaction at a fixed cumulativeTokens threshold regardless of
    * model. Prefer triggerFraction for new code.
    */
-  watermarkTokens?: number
+  watermarkTokens?: number | undefined
 
   /** The strategy to use for each summarisation pass. Default: SummarizationStrategy */
-  strategy?: CompactionStrategy
+  strategy?: CompactionStrategy | undefined
   /**
    * Cheap-first pass: head+tail truncate large tool_result blocks before
    * paying for an LLM summarisation. Set to `false` to disable. Default: enabled
@@ -46,13 +46,13 @@ export interface RollingCompactorConfig {
   toolTruncation?: ToolOutputTruncateConfig | false
 
   /** Max summarisation passes before triggering session rollover. Default: 3 */
-  maxPasses?: number
+  maxPasses?: number | undefined
   /** Provider for generating summaries (passed to default SummarizationStrategy) */
-  provider?: LLMProvider
+  provider?: LLMProvider | undefined
   /** Model for summaries */
-  summaryModel?: string
+  summaryModel?: string | undefined
   /** Custom summary prompt */
-  summaryPrompt?: string
+  summaryPrompt?: string | undefined
 }
 
 export interface CompactionEvent {

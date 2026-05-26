@@ -13,7 +13,7 @@ export type SessionStatus = 'active' | 'rolled_over' | 'archived'
  * @typeParam TInput  - Typed user input shape for this session
  * @typeParam TOutput - Typed assistant output shape for this session
  */
-export interface ChatSession<TInput = string, TOutput = string> {
+export interface ChatSession<TInput = unknown, TOutput = unknown> {
   id: string
   /** Human-readable label */
   label?: string

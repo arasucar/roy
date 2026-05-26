@@ -82,7 +82,7 @@ export class Orchestrator extends EventEmitter<OrchestratorEvents> {
     agent: AgentDefinition,
     session: ChatSession,
     userMessage: Message,
-    options: { signal?: AbortSignal } = {},
+    options: { signal?: AbortSignal | undefined } = {},
   ): AsyncIterable<StreamChunk> {
     const provider = this.getProvider(agent)
     this.emit('agent-start', { agentId: agent.id, sessionId: session.id })

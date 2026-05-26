@@ -42,6 +42,7 @@ export type {
   OllamaConfig,
   OpenRouterConfig,
   ModelInfo,
+  ProviderType,
 } from './types/provider.js'
 
 export type {
@@ -49,6 +50,9 @@ export type {
   MemorySchema,
   MemorySlot,
   MemoryMarker,
+  MemoryStorageAdapter,
+  MemoryEntry,
+  GlobalMemory,
 } from './types/memory.js'
 
 // ─── Providers ────────────────────────────────────────────────────────────────

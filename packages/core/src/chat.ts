@@ -241,7 +241,7 @@ export class Roy extends EventEmitter<RoyEvents> {
       { ...agent, systemPrompt: effectiveSystemPrompt },
       session,
       userMessage,
-      { signal: options.signal },
+      options.signal !== undefined ? { signal: options.signal } : {},
     )) {
       if (chunk.type === 'usage') {
         promptTokens = chunk.promptTokens
@@ -291,7 +291,10 @@ export class Roy extends EventEmitter<RoyEvents> {
 
   /** Create a new session for a given agent */
   async newSession(agentId?: string, label?: string): Promise<ChatSession> {
-    return this.sessions.create({ agentId: agentId ?? this.defaultAgentId, label })
+    return this.sessions.create({
+      agentId: agentId ?? this.defaultAgentId,
+      ...(label !== undefined ? { label } : {}),
+    })
   }
 
   /** Load an existing session */

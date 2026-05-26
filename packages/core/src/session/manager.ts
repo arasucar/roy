@@ -16,7 +16,6 @@ export class SessionManager<TInput = unknown, TOutput = unknown> {
     const now = new Date().toISOString()
     const session: ChatSession<TInput, TOutput> = {
       id: generateId(),
-      label: options.label,
       agentId: options.agentId,
       status: 'active',
       messages: [],
@@ -24,7 +23,8 @@ export class SessionManager<TInput = unknown, TOutput = unknown> {
       cumulativeCostUsd: 0,
       createdAt: now,
       updatedAt: now,
-      metadata: options.metadata,
+      ...(options.label !== undefined ? { label: options.label } : {}),
+      ...(options.metadata !== undefined ? { metadata: options.metadata } : {}),
     }
     await this.store.save(session)
     return session
@@ -74,7 +74,7 @@ export class SessionManager<TInput = unknown, TOutput = unknown> {
     session: ChatSession<TInput, TOutput>,
     options: BranchOptions = {},
   ): Promise<ChatSession<TInput, TOutput>> {
-    let messages = session.messages as Message[]
+    let messages = session.messages
 
     if (options.fromMessageId) {
       const idx = messages.findIndex((m) => m.id === options.fromMessageId)
@@ -88,7 +88,7 @@ export class SessionManager<TInput = unknown, TOutput = unknown> {
       ...session,
       id: generateId(),
       label: options.label ?? `Branch of ${session.label ?? session.id}`,
-      messages: messages as unknown as Message[],
+      messages,
       parentSessionId: session.id,
       status: 'active',
       createdAt: now,

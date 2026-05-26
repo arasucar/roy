@@ -51,7 +51,10 @@ export class AnthropicProvider implements LLMProvider {
 
   async *stream(options: SendOptions): AsyncIterable<StreamChunk> {
     const Anthropic = await getAnthropic()
-    const client = new Anthropic({ apiKey: this.apiKey, baseURL: this.baseUrl })
+    const client = new Anthropic({
+      apiKey: this.apiKey,
+      ...(this.baseUrl !== undefined ? { baseURL: this.baseUrl } : {}),
+    })
 
     const anthropicMessages = buildAnthropicMessages(
       options.messages.filter((m) => m.role !== 'system'),
@@ -70,11 +73,11 @@ export class AnthropicProvider implements LLMProvider {
 
     const stream = client.messages.stream({
       model: options.model,
-      system,
       messages: anthropicMessages,
-      tools: tools.length > 0 ? tools : undefined,
       max_tokens: options.maxTokens ?? 4096,
-      temperature: options.temperature,
+      ...(system !== undefined ? { system } : {}),
+      ...(tools.length > 0 ? { tools } : {}),
+      ...(options.temperature !== undefined ? { temperature: options.temperature } : {}),
     })
 
     if (options.signal) {
@@ -124,7 +127,6 @@ export class AnthropicProvider implements LLMProvider {
       id: generateId(),
       role: 'assistant',
       content: [{ type: 'text', text: fullText }],
-      agentId: undefined,
       createdAt: new Date().toISOString(),
       cost: {
         promptTokens,
@@ -167,10 +169,16 @@ interface AnthropicMessage {
   content: AnthropicTextPart[]
 }
 
+interface AnthropicInputSchema extends Record<string, unknown> {
+  type: 'object'
+  properties: Record<string, unknown>
+  required: string[]
+}
+
 interface AnthropicToolDef {
   name: string
   description: string
-  input_schema: Record<string, unknown>
+  input_schema: AnthropicInputSchema
   cache_control?: { type: 'ephemeral' }
 }
 
@@ -237,7 +245,7 @@ export function buildAnthropicSystem(
 }
 
 // Minimal Zod → JSON Schema conversion for tool definitions
-function zodToJsonSchema(schema: import('zod').ZodTypeAny): Record<string, unknown> {
+function zodToJsonSchema(schema: import('zod').ZodTypeAny): AnthropicInputSchema {
   // In production use zod-to-json-schema package for full coverage
   const shape = (schema as { _def?: { shape?: () => Record<string, unknown> } })._def?.shape?.() ?? {}
   const properties: Record<string, unknown> = {}

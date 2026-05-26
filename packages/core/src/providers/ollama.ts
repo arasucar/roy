@@ -37,7 +37,7 @@ export class OllamaProvider implements LLMProvider {
         stream: true,
         temperature: options.temperature,
       }),
-      signal: options.signal,
+      ...(options.signal !== undefined ? { signal: options.signal } : {}),
     })
 
     if (!response.ok) {

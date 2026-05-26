@@ -24,23 +24,23 @@ export interface SummarizationConfig {
    * The LLM provider to use for generating summaries.
    * Defaults to the session's primary provider.
    */
-  provider?: LLMProvider
+  provider?: LLMProvider | undefined
   /** Model ID to use for summarization. Recommend a fast, cheap model. */
-  model?: string
+  model?: string | undefined
   /**
    * Custom summarization prompt. Use {{messages}} as the placeholder.
    */
-  summaryPrompt?: string
+  summaryPrompt?: string | undefined
   /**
    * How many messages (from the oldest) to summarize per pass.
    * Default: compact the oldest 50% of non-system messages.
    */
-  batchRatio?: number
+  batchRatio?: number | undefined
   /**
    * Minimum messages required before attempting summarization.
    * Default: 4
    */
-  minMessages?: number
+  minMessages?: number | undefined
 }
 
 /**
@@ -60,8 +60,8 @@ export class SummarizationStrategy implements CompactionStrategy {
   private readonly summaryPrompt: string
   private readonly batchRatio: number
   private readonly minMessages: number
-  private provider?: LLMProvider
-  private model?: string
+  private provider: LLMProvider | undefined
+  private model: string | undefined
 
   constructor(config: SummarizationConfig = {}) {
     this.summaryPrompt = config.summaryPrompt ?? DEFAULT_SUMMARY_PROMPT

@@ -181,9 +181,9 @@ export class PlanEngine {
       title: planData.title,
       goal: planData.goal,
       steps: planData.steps.map((s) => ({ ...s, id: generateId() })),
-      constraints: planData.constraints,
       status: 'pending_approval',
       createdAt: new Date().toISOString(),
+      ...(planData.constraints !== undefined ? { constraints: planData.constraints } : {}),
     }
 
     this.plan = plan
@@ -213,7 +213,7 @@ export class PlanEngine {
         ...this.plan,
         status: 'rejected',
         rejectedAt: new Date().toISOString(),
-        rejectionReason,
+        ...(rejectionReason !== undefined ? { rejectionReason } : {}),
       }
       // Go back to gathering so the agent can revise
       this.state = 'gathering'

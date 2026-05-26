@@ -31,7 +31,9 @@ export class GeminiProvider implements LLMProvider {
     const genAI = new GoogleGenerativeAI(this.apiKey)
     const model = genAI.getGenerativeModel({
       model: options.model,
-      systemInstruction: options.systemPrompt,
+      ...(options.systemPrompt !== undefined
+        ? { systemInstruction: options.systemPrompt }
+        : {}),
     })
 
     const history = options.messages

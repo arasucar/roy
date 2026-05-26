@@ -5,13 +5,13 @@ import type { ToolDefinition } from '../types/tool.js'
 
 export interface SendOptions {
   model: string
-  systemPrompt?: string
+  systemPrompt?: string | undefined
   messages: Message[]
-  tools?: ToolDefinition[]
-  temperature?: number
-  maxTokens?: number
+  tools?: ToolDefinition[] | undefined
+  temperature?: number | undefined
+  maxTokens?: number | undefined
   /** AbortSignal for cancellation */
-  signal?: AbortSignal
+  signal?: AbortSignal | undefined
 }
 
 /**
