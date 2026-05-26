@@ -55,6 +55,20 @@ export interface RollingCompactorConfig {
   summaryPrompt?: string | undefined
   /** Exact number of oldest messages to summarize per pass. */
   summaryBatchSize?: number | undefined
+  /**
+   * Called with source messages that a strategy compacted away or materially
+   * reduced. Runs before the updated session is returned to the caller.
+   */
+  onMessagesCompacted?:
+    | ((messages: Message[], context: CompactionContext) => Promise<void> | void)
+    | undefined
+}
+
+export interface MaybeCompactOptions {
+  /** System prompt to include when estimating the active prompt budget. */
+  systemPrompt?: string | undefined
+  /** Messages that are about to be sent but should not themselves be compacted. */
+  pendingMessages?: Message[] | undefined
 }
 
 export interface CompactionEvent {
@@ -71,7 +85,9 @@ export interface CompactionEvent {
 
 export interface SessionRolloverEvent {
   oldSessionId: string
+  oldSession: ChatSession
   newSessionId: string
+  newSession: ChatSession
   summaryText: string
   reason: 'max_passes_reached' | 'cannot_compact'
 }
@@ -185,11 +201,21 @@ export class RollingCompactor extends EventEmitter<RollingCompactorEvents> {
     session: ChatSession,
     provider: LLMProvider,
     model: string,
+    options: MaybeCompactOptions = {},
   ): Promise<ChatSession> {
     const budget = this.budget(provider, model)
-    if (session.cumulativeTokens < budget.triggerAt) return session
+    const tokenCountFor =
+      options.systemPrompt !== undefined || options.pendingMessages !== undefined
+        ? (messages: Message[]) =>
+            provider.estimateTokens(
+              [...messages, ...(options.pendingMessages ?? [])],
+              options.systemPrompt,
+            )
+        : undefined
+    const currentTokens = tokenCountFor ? tokenCountFor(session.messages) : session.cumulativeTokens
+    if (currentTokens < budget.triggerAt) return session
 
-    let working = session
+    let working: ChatSession = { ...session, cumulativeTokens: currentTokens }
 
     // ── Escalation 1: tool-output truncation ─────────────────────────────────
     if (this.truncationStrategy) {
@@ -199,6 +225,7 @@ export class RollingCompactor extends EventEmitter<RollingCompactorEvents> {
         model,
         this.truncationStrategy,
         'truncated-tools',
+        tokenCountFor,
       )
       if (truncated) {
         working = truncated
@@ -208,7 +235,14 @@ export class RollingCompactor extends EventEmitter<RollingCompactorEvents> {
 
     // ── Escalation 2..N: summarisation passes ────────────────────────────────
     while (this.passCount < this.maxPasses) {
-      const summarised = await this.runStep(working, provider, model, this.strategy, 'summarized')
+      const summarised = await this.runStep(
+        working,
+        provider,
+        model,
+        this.strategy,
+        'summarized',
+        tokenCountFor,
+      )
       if (!summarised) break // strategy can't compact further
       working = summarised
       if (working.cumulativeTokens < budget.targetAt) return working
@@ -233,6 +267,7 @@ export class RollingCompactor extends EventEmitter<RollingCompactorEvents> {
     model: string,
     strategy: CompactionStrategy,
     step: CompactionEvent['step'],
+    tokenCountFor?: ((messages: Message[]) => number) | undefined,
   ): Promise<ChatSession | null> {
     const tokensBefore = session.cumulativeTokens
     const context: CompactionContext = {
@@ -245,9 +280,16 @@ export class RollingCompactor extends EventEmitter<RollingCompactorEvents> {
     const result = await strategy.compact(session.messages, context)
     if (result === null) return null
 
+    if (result.compactedMessages?.length) {
+      await this.config.onMessagesCompacted?.(result.compactedMessages, context)
+    }
+
     if (step === 'summarized') this.passCount++
 
-    const tokensAfter = Math.max(0, tokensBefore - result.tokensFreed)
+    const tokensAfter = tokenCountFor
+      ? tokenCountFor(result.messages)
+      : Math.max(0, tokensBefore - result.tokensFreed)
+    const tokensFreed = Math.max(0, tokensBefore - tokensAfter)
     const updated: ChatSession = {
       ...session,
       messages: result.messages,
@@ -260,7 +302,7 @@ export class RollingCompactor extends EventEmitter<RollingCompactorEvents> {
       passNumber: this.passCount,
       tokensBefore,
       tokensAfter,
-      tokensFreed: result.tokensFreed,
+      tokensFreed,
       messagesCompacted: session.messages.length - result.messages.length,
       summary: result.summary,
       step,
@@ -340,7 +382,9 @@ export class RollingCompactor extends EventEmitter<RollingCompactorEvents> {
 
     this.emit('session-rollover', {
       oldSessionId: session.id,
+      oldSession: session,
       newSessionId,
+      newSession,
       summaryText: summaryText.trim(),
       reason,
     })

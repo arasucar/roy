@@ -34,7 +34,7 @@ export type PlanModeState = 'gathering' | 'drafting' | 'pending_approval' | 'exe
  *
  * The engine sits between the chat runner and the LLM:
  * - In 'gathering' state: messages pass through normally (questions only)
- * - When the agent signals it has enough info: transition to 'drafting'
+ * - When the host explicitly requests a plan: transition to 'drafting'
  * - 'drafting': call the LLM to emit a PlanDocument
  * - 'pending_approval': call the host's onPlanApproval callback
  * - 'executing': tools and side effects are now permitted
@@ -74,43 +74,21 @@ export class PlanEngine {
 
   /**
    * Intercept an outgoing assistant message.
-   * If the assistant's response contains a signal that it's ready to plan
-   * (detected via heuristic or explicit signal token), transition to drafting.
+   * This records context only. Plan drafting is deliberately host-driven via
+   * requestPlan; Roy does not infer approval gates from assistant text.
    */
-  async onAssistantMessage(message: Message): Promise<PlanDocument | undefined> {
+  onAssistantMessage(message: Message): void {
     this.gatheringMessages.push(message)
-
-    if (this.state !== 'gathering') return undefined
-
-    // Detect plan-ready signal: assistant says something like
-    // "I have all the information I need" or includes [PLAN_READY]
-    const text = message.content
-      .filter((b) => b.type === 'text')
-      .map((b) => (b as any).text as string)
-      .join(' ')
-      .toLowerCase()
-
-    const signals = [
-      '[plan_ready]',
-      'i have enough information',
-      'i have all the information i need',
-      "i'm ready to create the plan",
-      'ready to proceed with the plan',
-    ]
-
-    const isReady = signals.some((s) => text.includes(s))
-    if (isReady) {
-      return this.transitionToDrafting()
-    }
-
-    return undefined
   }
 
   /**
    * Explicitly signal that gathering is complete and we should emit a plan.
    * Call this from the host app or when the user explicitly requests it.
    */
-  async requestPlan(): Promise<PlanDocument> {
+  async requestPlan(messages?: Message[]): Promise<PlanDocument> {
+    if (messages !== undefined) {
+      this.gatheringMessages = [...messages]
+    }
     if (this.state !== 'gathering') {
       throw new Error(`[Roy] Cannot request plan in state: ${this.state}`)
     }

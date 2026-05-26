@@ -75,6 +75,20 @@ export type { CompactionStrategy, CompactionEvent, SessionRolloverEvent } from '
 
 // ─── Agents ───────────────────────────────────────────────────────────────────
 export { AgentRegistry, Orchestrator, CycleEngine, CycleEngineError } from './agents/index.js'
+export type {
+  AgentEndEvent,
+  AgentRunEvent,
+  CostUpdatedEvent,
+  HandoffContext,
+  HandoffEvent,
+  HandoffRequest,
+  OrchestratorEvents,
+  PlanEvent,
+  RunDoneEvent,
+  RunErrorEvent,
+  ToolCallEvent,
+  ToolResultEvent,
+} from './agents/index.js'
 
 // ─── Cost ─────────────────────────────────────────────────────────────────────
 export { CostCalculator, MODEL_PRICING } from './cost/index.js'

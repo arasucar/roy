@@ -3,6 +3,7 @@ import type { StreamChunk, Message } from '../types/message.js'
 import type { ToolDefinition } from '../types/tool.js'
 import type { ObjectJsonSchema } from './json-schema.js'
 import { zodToObjectJsonSchema } from './json-schema.js'
+import { estimatePromptTokens } from './token-estimate.js'
 import { generateId } from '../utils/id.js'
 
 const CONTEXT_WINDOWS: Record<string, number> = {
@@ -108,11 +109,7 @@ export class OpenRouterProvider implements LLMProvider {
   }
 
   estimateTokens(messages: Message[], systemPrompt?: string): number {
-    const text = [
-      systemPrompt ?? '',
-      ...messages.map((m) => m.content.map((b) => ('text' in b ? (b as any).text : '')).join(' ')),
-    ].join(' ')
-    return Math.ceil(text.length / 4)
+    return estimatePromptTokens(messages, systemPrompt)
   }
 
   contextWindowSize(_model: string): number {

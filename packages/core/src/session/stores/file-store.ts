@@ -2,6 +2,8 @@ import { readFile, writeFile, readdir, unlink, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { StorageAdapter, ChatSession } from '../../types/session.js'
 
+const SAFE_SESSION_ID = /^[A-Za-z0-9_-]+$/
+
 /**
  * File-based session store. Persists each session as a JSON file.
  * Good for CLI tools, scripts, and single-process servers.
@@ -22,6 +24,9 @@ export class FileStore<TInput = unknown, TOutput = unknown> implements StorageAd
   }
 
   private filePath(sessionId: string): string {
+    if (!SAFE_SESSION_ID.test(sessionId)) {
+      throw new Error('[Roy] Invalid session ID for FileStore.')
+    }
     return join(this.directory, `${sessionId}.json`)
   }
 

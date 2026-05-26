@@ -198,6 +198,79 @@ describe('SummarizationStrategy', () => {
     })
     expect(result?.messages).toHaveLength(4)
   })
+
+  it('includes tool calls and tool results in the summary prompt', async () => {
+    const calls: Array<{ messages: Message[] }> = []
+    const provider: LLMProvider = {
+      type: 'fake',
+      async *stream(options): AsyncIterable<StreamChunk> {
+        calls.push({ messages: options.messages })
+        yield { type: 'text', delta: 'tool summary' }
+      },
+      estimateTokens: () => 0,
+      contextWindowSize: () => 128_000,
+    }
+    const strategy = new SummarizationStrategy({
+      provider,
+      model: 'summary-model',
+      batchSize: 2,
+      minMessages: 2,
+    })
+    const messages: Message[] = [
+      {
+        id: 'tool-call-msg',
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool_call',
+            toolCall: { id: 'tc_1', name: 'search', arguments: '{"query":"roy"}' },
+          },
+        ],
+        createdAt: '',
+      },
+      {
+        id: 'tool-result-msg',
+        role: 'tool',
+        content: [
+          {
+            type: 'tool_result',
+            toolResult: {
+              toolCallId: 'tc_1',
+              name: 'search',
+              result: { title: 'Docs for roy' },
+            },
+          },
+        ],
+        createdAt: '',
+      },
+      textMsg('assistant', 'final answer'),
+    ]
+
+    const result = await strategy.compact(messages, {
+      session: session(100, messages),
+      currentTokens: 100,
+      contextWindowSize: 128_000,
+      passCount: 0,
+    })
+
+    const prompt = calls[0]!.messages[0]!.content[0]!
+    expect(prompt.type).toBe('text')
+    expect(prompt.type === 'text' ? prompt.text : '').toContain(
+      '[tool_call search#tc_1]: {"query":"roy"}',
+    )
+    expect(prompt.type === 'text' ? prompt.text : '').toContain(
+      '[tool_result search#tc_1]: {"title":"Docs for roy"}',
+    )
+    expect(result?.compactedMessages?.map((m) => m.id)).toEqual([
+      'tool-call-msg',
+      'tool-result-msg',
+    ])
+    const summary = result?.messages.find((m) => m.content[0]?.type === 'summary')
+    expect(summary?.content[0]).toMatchObject({
+      type: 'summary',
+      sourceMessageIds: ['tool-call-msg', 'tool-result-msg'],
+    })
+  })
 })
 
 describe('RollingCompactor — config validation', () => {

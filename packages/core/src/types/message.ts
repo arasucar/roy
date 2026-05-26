@@ -29,6 +29,8 @@ export interface SummaryContent {
   replacedCount: number
   /** Token count of the content before compaction */
   originalTokens: number
+  /** Message IDs represented by this summary, when available. */
+  sourceMessageIds?: string[]
 }
 
 export type ContentBlock = TextContent | ToolCallContent | ToolResultContent | SummaryContent

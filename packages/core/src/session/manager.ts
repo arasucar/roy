@@ -53,13 +53,25 @@ export class SessionManager<TInput = unknown, TOutput = unknown> {
     session: ChatSession<TInput, TOutput>,
     message: Message<TInput, TOutput>,
   ): Promise<ChatSession<TInput, TOutput>> {
-    // Parentheses required — `+` binds tighter than `??` without them
-    const tokenDelta = (message.cost?.promptTokens ?? 0) + (message.cost?.completionTokens ?? 0)
+    const messages = [...session.messages, message]
     const updated: ChatSession<TInput, TOutput> = {
       ...session,
-      messages: [...session.messages, message],
-      cumulativeTokens: session.cumulativeTokens + tokenDelta,
+      messages,
+      cumulativeTokens: estimateMessageTokens(messages),
       cumulativeCostUsd: session.cumulativeCostUsd + (message.cost?.estimatedCostUsd ?? 0),
+      updatedAt: new Date().toISOString(),
+    }
+    await this.store.save(updated)
+    return updated
+  }
+
+  async updateTokenBudget(
+    session: ChatSession<TInput, TOutput>,
+    cumulativeTokens: number,
+  ): Promise<ChatSession<TInput, TOutput>> {
+    const updated: ChatSession<TInput, TOutput> = {
+      ...session,
+      cumulativeTokens: Math.max(0, Math.ceil(cumulativeTokens)),
       updatedAt: new Date().toISOString(),
     }
     await this.store.save(updated)
@@ -114,5 +126,34 @@ export class SessionManager<TInput = unknown, TOutput = unknown> {
       childSessionId: newSessionId,
       updatedAt: new Date().toISOString(),
     })
+  }
+}
+
+function estimateMessageTokens(messages: Message[]): number {
+  const text = messages
+    .map((message) => message.content.map(serializeContentBlock).filter(Boolean).join('\n'))
+    .join('\n')
+  return Math.ceil(text.length / 4)
+}
+
+function serializeContentBlock(block: Message['content'][number]): string {
+  switch (block.type) {
+    case 'text':
+      return block.text
+    case 'summary':
+      return block.text
+    case 'tool_call':
+      return `${block.toolCall.name} ${block.toolCall.arguments}`
+    case 'tool_result':
+      return `${block.toolResult.name} ${serializeToolResult(block.toolResult.result)}`
+  }
+}
+
+function serializeToolResult(result: unknown): string {
+  if (typeof result === 'string') return result
+  try {
+    return JSON.stringify(result)
+  } catch {
+    return String(result)
   }
 }

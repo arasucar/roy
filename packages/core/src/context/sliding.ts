@@ -44,6 +44,7 @@ export class SlidingWindowStrategy implements CompactionStrategy {
 
     const kept = nonSystem.slice(-this.keepLastN)
     const dropped = nonSystem.length - kept.length
+    const droppedMessages = nonSystem.slice(0, dropped)
     const result = [...systemMessages, ...kept]
 
     return {
@@ -62,6 +63,7 @@ export class SlidingWindowStrategy implements CompactionStrategy {
             4),
       ),
       summary: `SlidingWindow: dropped ${dropped} oldest messages, kept last ${kept.length}.`,
+      compactedMessages: droppedMessages,
     }
   }
 }

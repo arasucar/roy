@@ -19,7 +19,8 @@ export interface CycleConfig {
   hopCooldownMs?: number
   /**
    * Explicit allowlist of agent IDs this agent may hand off to.
-   * If undefined, handoff to any registered agent is permitted.
+   * If undefined, handoff to any registered agent is permitted. Roy validates
+   * handoff requests, but the host app owns the workflow loop.
    */
   allowedHandoffTargets?: string[]
   /**
@@ -190,8 +191,9 @@ export interface AgentDefinition {
   cycle?: CycleConfig
   /**
    * If true, this agent operates in plan mode:
-   * it collects requirements, emits a PlanDocument, and waits for approval
-   * before executing any tools or side-effecting operations.
+   * it collects requirements with tools disabled until the host explicitly
+   * requests a PlanDocument and approves it. Roy never infers approval gates
+   * from assistant text.
    */
   planMode?: boolean
   /**

@@ -83,6 +83,7 @@ export class ToolOutputTruncationStrategy implements CompactionStrategy {
 
     let truncatedBlocks = 0
     let charsRemoved = 0
+    const truncatedMessageIndexes = new Set<number>()
 
     for (const { msgIdx, blockIdx } of truncatable) {
       const msg = cloned[msgIdx]!
@@ -102,6 +103,7 @@ export class ToolOutputTruncationStrategy implements CompactionStrategy {
       writeToolResultText(block, replacement)
       truncatedBlocks++
       charsRemoved += removed
+      truncatedMessageIndexes.add(msgIdx)
     }
 
     if (truncatedBlocks === 0) return null
@@ -112,6 +114,7 @@ export class ToolOutputTruncationStrategy implements CompactionStrategy {
       summary: `ToolOutputTruncation: truncated ${truncatedBlocks} tool_result block(s), freed ~${Math.ceil(
         charsRemoved / 4,
       ).toLocaleString()} tokens.`,
+      compactedMessages: [...truncatedMessageIndexes].map((idx) => messages[idx]!),
     }
   }
 }

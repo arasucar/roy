@@ -20,6 +20,12 @@ export interface CompactionResult {
   tokensFreed: number
   /** Human-readable description of what happened */
   summary: string
+  /**
+   * Original messages that were compacted away or materially reduced.
+   * Hosts can use this to extract durable memory before the source detail
+   * disappears from the active context.
+   */
+  compactedMessages?: Message[] | undefined
 }
 
 /**

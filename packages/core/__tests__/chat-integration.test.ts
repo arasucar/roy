@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
-import { createChat } from '../src/index.js'
+import { createChat, InMemoryMemoryStore } from '../src/index.js'
 import type { Message, StreamChunk } from '../src/types/message.js'
 import type { ToolDefinition } from '../src/types/tool.js'
 
@@ -118,7 +118,9 @@ describe('createChat OpenRouter integration', () => {
       source: 'integration-test',
     })
     expect(session?.messages[1]?.role).toBe('assistant')
-    expect(session?.cumulativeTokens).toBe(120)
+    expect(session?.cumulativeTokens).toBe(
+      Math.ceil('Be concise. Say hello Hello from Roy'.length / 4),
+    )
     expect(session?.cumulativeCostUsd).toBeCloseTo(0.000027, 10)
   })
 
@@ -163,6 +165,19 @@ describe('createChat OpenRouter integration', () => {
           tools: [searchTool],
         },
       ],
+    })
+    const runEvents: string[] = []
+    roy.on('agent-start', ({ agentId }) => runEvents.push(`agent-start:${agentId}`))
+    roy.on('tool-call', ({ toolCall }) => runEvents.push(`tool-call:${toolCall.name}`))
+    roy.on('tool-result', ({ toolResult }) => runEvents.push(`tool-result:${toolResult.name}`))
+    roy.on('cost-updated', ({ cost }) => {
+      runEvents.push('cost-updated')
+      expect(cost.promptTokens).toBe(30)
+      expect(cost.completionTokens).toBe(7)
+    })
+    roy.on('done', ({ message }) => {
+      runEvents.push('done')
+      expect(message.cost?.promptTokens).toBe(30)
     })
 
     const emitted: StreamChunk[] = []
@@ -228,8 +243,20 @@ describe('createChat OpenRouter integration', () => {
     expect(session?.messages[1]?.content[0]?.type).toBe('tool_call')
     expect(session?.messages[2]?.role).toBe('tool')
     expect(session?.messages[3]?.role).toBe('assistant')
-    expect(session?.cumulativeTokens).toBe(37)
+    expect(session?.cumulativeTokens).toBe(
+      Math.ceil(
+        'Use tools when useful. Find Roy docs search {"query":"roy"} search {"title":"Docs for roy"} Found Roy docs.'
+          .length / 4,
+      ),
+    )
     expect(session?.cumulativeCostUsd).toBeCloseTo(0.0000087, 10)
+    expect(runEvents).toEqual([
+      'agent-start:assistant',
+      'tool-call:search',
+      'tool-result:search',
+      'cost-updated',
+      'done',
+    ])
   })
 
   it('honors an agent sliding compaction strategy before sending', async () => {
@@ -287,6 +314,144 @@ describe('createChat OpenRouter integration', () => {
     expect(compacted?.messages[3]?.content[0]).toMatchObject({
       type: 'text',
       text: 'Compacted reply',
+    })
+  })
+
+  it('extracts marked memory from messages removed by compaction', async () => {
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        openRouterResponse([
+          'data: {"choices":[{"delta":{"content":"{\\"tone\\":\\"concise\\"}"}}]}\n\n',
+          'data: [DONE]\n\n',
+        ]),
+      )
+      .mockResolvedValueOnce(
+        openRouterResponse([
+          'data: {"choices":[{"delta":{"content":"Continuing."}}]}\n\n',
+          'data: {"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":2}}\n\n',
+          'data: [DONE]\n\n',
+        ]),
+      )
+
+    const memoryStore = new InMemoryMemoryStore()
+    const roy = createChat({
+      agents: [
+        {
+          id: 'assistant',
+          name: 'Assistant',
+          provider: {
+            type: 'openrouter',
+            apiKey: 'test-key',
+          },
+          model: 'openai/gpt-4o-mini',
+          systemPrompt: 'Be concise.',
+          compaction: {
+            strategy: 'sliding',
+            batchSize: 1,
+            watermarkTokens: 100,
+            toolTruncation: false,
+          },
+        },
+      ],
+      memory: {
+        schema: {
+          slots: [
+            {
+              name: 'preferences',
+              description: 'User preferences',
+              schema: z.object({ tone: z.string() }),
+            },
+          ],
+        },
+        store: memoryStore,
+      },
+    })
+
+    let session = await roy.newSession('assistant')
+    session = await roy.sessions.appendMessage(session, {
+      id: 'pref-msg',
+      role: 'user',
+      content: [{ type: 'text', text: 'Use concise answers. '.repeat(100) }],
+      metadata: { memoryMarker: { slots: ['preferences'] } },
+      createdAt: '2026-05-26T00:00:00Z',
+    })
+    session = await roy.sessions.appendMessage(session, {
+      id: 'recent-msg',
+      role: 'assistant',
+      content: [{ type: 'text', text: 'I will.' }],
+      createdAt: '2026-05-26T00:00:00Z',
+    })
+
+    for await (const _chunk of roy.send({ sessionId: session.id, input: 'continue' })) {
+      // drain
+    }
+
+    await expect(memoryStore.getSlot('preferences')).resolves.toMatchObject({
+      value: { tone: 'concise' },
+      sourceMessageIds: ['pref-msg'],
+    })
+  })
+
+  it('persists the rollover session before emitting session-rollover', async () => {
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        openRouterResponse([
+          'data: {"choices":[{"delta":{"content":"Rolled summary"}}]}\n\n',
+          'data: [DONE]\n\n',
+        ]),
+      )
+      .mockResolvedValueOnce(
+        openRouterResponse([
+          'data: {"choices":[{"delta":{"content":"Fresh reply"}}]}\n\n',
+          'data: {"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":2}}\n\n',
+          'data: [DONE]\n\n',
+        ]),
+      )
+
+    const roy = createChat({
+      agents: [
+        {
+          id: 'assistant',
+          name: 'Assistant',
+          provider: {
+            type: 'openrouter',
+            apiKey: 'test-key',
+          },
+          model: 'openai/gpt-4o-mini',
+          systemPrompt: 'Be concise.',
+          compaction: {
+            strategy: { descriptorId: 'summarization', config: { minMessages: 999 } },
+            watermarkTokens: 10,
+            toolTruncation: false,
+          },
+        },
+      ],
+    })
+
+    let session = await roy.newSession('assistant')
+    session = await roy.sessions.appendMessage(session, {
+      id: 'old-msg',
+      role: 'user',
+      content: [{ type: 'text', text: 'old context '.repeat(100) }],
+      createdAt: '2026-05-26T00:00:00Z',
+    })
+
+    let loadedDuringEvent: Awaited<ReturnType<typeof roy.loadSession>> | undefined
+    roy.on('session-rollover', (event) => {
+      void roy.loadSession(event.newSessionId).then((loaded) => {
+        loadedDuringEvent = loaded
+      })
+    })
+
+    for await (const _chunk of roy.send({ sessionId: session.id, input: 'continue' })) {
+      // drain
+    }
+    await Promise.resolve()
+
+    expect(loadedDuringEvent?.parentSessionId).toBe(session.id)
+    expect(loadedDuringEvent?.messages[0]?.content[0]).toMatchObject({
+      type: 'summary',
+      text: '[Context from previous session]\n\nRolled summary',
     })
   })
 })

@@ -19,7 +19,9 @@ export class CycleEngineError extends Error {
 }
 
 /**
- * CycleEngine validates and tracks agent-to-agent handoffs.
+ * CycleEngine validates and tracks agent-to-agent handoff requests.
+ * It is intentionally not a durable workflow runner; host applications own
+ * retries, pause/resume/cancel, scheduling, and persisted run state.
  *
  * Configuration (per AgentDefinition.cycle):
  * - maxHops: stop after N hops

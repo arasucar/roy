@@ -22,7 +22,11 @@ export interface ChatSession<TInput = unknown, TOutput = unknown> {
   status: SessionStatus
   messages: Message<TInput, TOutput>[]
 
-  /** Running total of tokens processed (used to trigger compaction watermarks) */
+  /**
+   * Estimated current prompt budget for this session, not lifetime usage.
+   * Roy recalculates this from the active messages/system prompt and uses it
+   * to trigger compaction watermarks.
+   */
   cumulativeTokens: number
   /** Running estimated cost in USD */
   cumulativeCostUsd: number

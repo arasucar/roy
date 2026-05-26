@@ -9,29 +9,87 @@ import { CycleEngine } from './cycle-engine.js'
 import { PlanEngine } from './plan-engine.js'
 import { createProvider } from '../providers/factory.js'
 import { CostCalculator, type CostCalculatorConfig } from '../cost/calculator.js'
+import type { TurnCost } from '../cost/calculator.js'
 import { generateId } from '../utils/id.js'
 
 export interface HandoffRequest {
   targetAgentId: string
   reason?: string
-  /** Pass full history or only summary to the next agent */
+  /** Whether the handoff event should carry full-context intent or a compact summary. */
   contextMode?: 'full' | 'summary'
 }
 
+export interface HandoffContext {
+  mode: 'summary'
+  reason?: string
+  summary: string
+  sourceMessageIds: string[]
+}
+
+export interface AgentRunEvent {
+  agentId: string
+  sessionId: string
+}
+
+export interface AgentEndEvent extends AgentRunEvent {
+  tokens: number
+  costUsd: number
+}
+
+export interface ToolCallEvent extends AgentRunEvent {
+  toolCall: ToolCall
+}
+
+export interface ToolResultEvent extends AgentRunEvent {
+  toolResult: ToolResult
+}
+
+export interface HandoffEvent {
+  from: string
+  to: string
+  hopNumber: number
+  contextMode: 'full' | 'summary'
+  handoffContext?: HandoffContext
+}
+
+export interface PlanEvent {
+  plan: import('../types/agent.js').PlanDocument
+}
+
+export interface CostUpdatedEvent extends AgentRunEvent {
+  cost: TurnCost
+}
+
+export interface RunDoneEvent extends AgentRunEvent {
+  message: Message
+  messages?: Message[]
+}
+
+export interface RunErrorEvent extends Partial<AgentRunEvent> {
+  error: Error
+}
+
 export interface OrchestratorEvents {
-  'agent-start': [{ agentId: string; sessionId: string }]
-  'agent-end': [{ agentId: string; sessionId: string; tokens: number; costUsd: number }]
-  'agent-handoff': [{ from: string; to: string; hopNumber: number }]
-  'plan-ready': [{ plan: import('../types/agent.js').PlanDocument }]
-  'plan-approved': [{ plan: import('../types/agent.js').PlanDocument }]
-  'plan-rejected': [{ plan: import('../types/agent.js').PlanDocument }]
-  error: [Error]
+  'agent-start': [AgentRunEvent]
+  'agent-end': [AgentEndEvent]
+  'tool-call': [ToolCallEvent]
+  'tool-result': [ToolResultEvent]
+  handoff: [HandoffEvent]
+  'agent-handoff': [HandoffEvent]
+  'plan-ready': [PlanEvent]
+  'approval-requested': [PlanEvent]
+  'plan-approved': [PlanEvent]
+  'plan-rejected': [PlanEvent]
+  'cost-updated': [CostUpdatedEvent]
+  done: [RunDoneEvent]
+  error: [RunErrorEvent]
 }
 
 const MAX_TOOL_ITERATIONS = 5
 
 /**
- * Orchestrator — coordinates agent execution, handoffs, and plan mode.
+ * Orchestrator — runs single agent turns and exposes handoff/plan primitives.
+ * It does not own a durable multi-agent workflow loop.
  * One Orchestrator instance per Roy chat instance.
  */
 export class Orchestrator extends EventEmitter<OrchestratorEvents> {
@@ -45,6 +103,28 @@ export class Orchestrator extends EventEmitter<OrchestratorEvents> {
   ) {
     super()
     this.costCalc = new CostCalculator(costConfig)
+  }
+
+  async requestPlan(agent: AgentDefinition, session: ChatSession): Promise<PlanEvent['plan']> {
+    if (!agent.planMode) {
+      throw new Error(`[Roy] Agent "${agent.id}" does not have planMode enabled.`)
+    }
+
+    const planEngine = this.getPlanEngine(agent, session)
+    const plan = await planEngine.requestPlan(session.messages)
+    this.emit('plan-ready', { plan })
+    this.emit('approval-requested', { plan })
+
+    const decidedPlan = await planEngine.requestApproval()
+    if (decidedPlan?.status === 'approved') {
+      this.emit('plan-approved', { plan: decidedPlan })
+      return decidedPlan
+    }
+    if (decidedPlan?.status === 'rejected') {
+      this.emit('plan-rejected', { plan: decidedPlan })
+      return decidedPlan
+    }
+    return plan
   }
 
   getProvider(agent: AgentDefinition): LLMProvider {
@@ -85,7 +165,7 @@ export class Orchestrator extends EventEmitter<OrchestratorEvents> {
     agent: AgentDefinition,
     session: ChatSession,
     userMessage: Message,
-    options: { signal?: AbortSignal | undefined } = {},
+    options: { signal?: AbortSignal | undefined; requestPlan?: boolean | undefined } = {},
   ): AsyncIterable<StreamChunk> {
     const provider = this.getProvider(agent)
     this.emit('agent-start', { agentId: agent.id, sessionId: session.id })
@@ -98,8 +178,7 @@ export class Orchestrator extends EventEmitter<OrchestratorEvents> {
       const planSystemSuffix = planEngine.isExecuting
         ? '\n\nYou are now in EXECUTION mode. You may use tools and take actions.'
         : '\n\nYou are in PLAN mode. Your goal is to gather information by asking clarifying questions. ' +
-          'Do NOT take any actions or call any tools yet. Once you have all required information, ' +
-          'say "[PLAN_READY]" to signal you are ready to create the execution plan.'
+          'Do NOT take any actions or call any tools yet. The host application will explicitly request plan drafting when ready.'
 
       const systemPrompt = (agent.systemPrompt ?? '') + planSystemSuffix
       const tools = planEngine.isExecuting ? agent.tools : undefined
@@ -110,11 +189,14 @@ export class Orchestrator extends EventEmitter<OrchestratorEvents> {
       let fullText = ''
       let promptTokens = 0
       let completionTokens = 0
+      let cacheCreationInputTokens = 0
+      let cacheReadInputTokens = 0
       let doneChunk: Extract<StreamChunk, { type: 'done' }> | undefined
 
       for await (const chunk of this.streamProviderTurn({
         provider,
         agent: { ...agent, systemPrompt },
+        sessionId: session.id,
         messages: [...session.messages, userMessage] as Message[],
         tools,
         signal: options.signal,
@@ -123,6 +205,11 @@ export class Orchestrator extends EventEmitter<OrchestratorEvents> {
         if (chunk.type === 'usage') {
           promptTokens += chunk.promptTokens
           completionTokens += chunk.completionTokens
+          cacheCreationInputTokens += chunk.cacheCreationInputTokens ?? 0
+          cacheReadInputTokens += chunk.cacheReadInputTokens ?? 0
+        }
+        if (chunk.type === 'error') {
+          this.emit('error', { agentId: agent.id, sessionId: session.id, error: chunk.error })
         }
         if (chunk.type === 'done') {
           doneChunk = chunk
@@ -132,19 +219,31 @@ export class Orchestrator extends EventEmitter<OrchestratorEvents> {
       }
 
       // After streaming, process plan mode state
+      const turnCost = this.costCalc.calculate(agent.model, {
+        promptTokens,
+        completionTokens,
+        cacheCreationInputTokens,
+        cacheReadInputTokens,
+      })
       const assistantMsg: Message = {
         id: generateId(),
         role: 'assistant',
         content: [{ type: 'text', text: fullText }],
         agentId: agent.id,
         createdAt: new Date().toISOString(),
-        cost: this.costCalc.calculate(agent.model, promptTokens, completionTokens),
+        cost: turnCost,
       }
 
       if (!planEngine.isExecuting) {
-        const readyPlan = await planEngine.onAssistantMessage(assistantMsg)
-        if (readyPlan?.status === 'pending_approval') {
-          this.emit('plan-ready', { plan: readyPlan })
+        planEngine.onAssistantMessage(assistantMsg)
+        if (options.requestPlan) {
+          const plan = await planEngine.requestPlan([
+            ...session.messages,
+            userMessage,
+            assistantMsg,
+          ])
+          this.emit('plan-ready', { plan })
+          this.emit('approval-requested', { plan })
           const decidedPlan = await planEngine.requestApproval()
           if (decidedPlan?.status === 'approved') {
             this.emit('plan-approved', { plan: decidedPlan })
@@ -154,27 +253,51 @@ export class Orchestrator extends EventEmitter<OrchestratorEvents> {
         }
       }
 
+      this.emit('cost-updated', {
+        agentId: agent.id,
+        sessionId: session.id,
+        cost: turnCost,
+      })
       this.emit('agent-end', {
         agentId: agent.id,
         sessionId: session.id,
         tokens: promptTokens + completionTokens,
         costUsd: assistantMsg.cost?.estimatedCostUsd ?? 0,
       })
-      yield {
-        type: 'done',
+      const doneEvent = {
+        agentId: agent.id,
+        sessionId: session.id,
         message: doneChunk?.message ?? assistantMsg,
         ...(doneChunk?.messages !== undefined ? { messages: doneChunk.messages } : {}),
       }
+      this.emit('done', doneEvent)
+      yield {
+        type: 'done',
+        message: doneEvent.message,
+        ...(doneEvent.messages !== undefined ? { messages: doneEvent.messages } : {}),
+      }
       return
+    }
+
+    if (options.requestPlan) {
+      const error = new Error(
+        `[Roy] requestPlan requires agent "${agent.id}" to have planMode enabled.`,
+      )
+      this.emit('error', { agentId: agent.id, sessionId: session.id, error })
+      throw error
     }
 
     // Normal (non-plan) mode
     let promptTokens = 0
     let completionTokens = 0
+    let cacheCreationInputTokens = 0
+    let cacheReadInputTokens = 0
+    let doneChunk: Extract<StreamChunk, { type: 'done' }> | undefined
 
     for await (const chunk of this.streamProviderTurn({
       provider,
       agent,
+      sessionId: session.id,
       messages: [...session.messages, userMessage] as Message[],
       tools: agent.tools,
       signal: options.signal,
@@ -182,22 +305,49 @@ export class Orchestrator extends EventEmitter<OrchestratorEvents> {
       if (chunk.type === 'usage') {
         promptTokens += chunk.promptTokens
         completionTokens += chunk.completionTokens
+        cacheCreationInputTokens += chunk.cacheCreationInputTokens ?? 0
+        cacheReadInputTokens += chunk.cacheReadInputTokens ?? 0
+      }
+      if (chunk.type === 'error') {
+        this.emit('error', { agentId: agent.id, sessionId: session.id, error: chunk.error })
+      }
+      if (chunk.type === 'done') {
+        doneChunk = chunk
       }
       yield chunk
     }
 
-    const turnCost = this.costCalc.calculate(agent.model, promptTokens, completionTokens)
+    const turnCost = this.costCalc.calculate(agent.model, {
+      promptTokens,
+      completionTokens,
+      cacheCreationInputTokens,
+      cacheReadInputTokens,
+    })
+    this.emit('cost-updated', {
+      agentId: agent.id,
+      sessionId: session.id,
+      cost: turnCost,
+    })
     this.emit('agent-end', {
       agentId: agent.id,
       sessionId: session.id,
       tokens: promptTokens + completionTokens,
       costUsd: turnCost.estimatedCostUsd,
     })
+    if (doneChunk) {
+      this.emit('done', {
+        agentId: agent.id,
+        sessionId: session.id,
+        message: doneChunk.message,
+        ...(doneChunk.messages !== undefined ? { messages: doneChunk.messages } : {}),
+      })
+    }
   }
 
   private async *streamProviderTurn(options: {
     provider: LLMProvider
     agent: AgentDefinition
+    sessionId: string
     messages: Message[]
     tools?: ToolDefinition[] | undefined
     signal?: AbortSignal | undefined
@@ -252,6 +402,14 @@ export class Orchestrator extends EventEmitter<OrchestratorEvents> {
         return
       }
 
+      for (const toolCall of toolCalls) {
+        this.emit('tool-call', {
+          agentId: options.agent.id,
+          sessionId: options.sessionId,
+          toolCall,
+        })
+      }
+
       if (iteration === MAX_TOOL_ITERATIONS) {
         const error = new Error(`[Roy] Tool loop exceeded ${MAX_TOOL_ITERATIONS} iterations.`)
         yield { type: 'error', error }
@@ -276,6 +434,11 @@ export class Orchestrator extends EventEmitter<OrchestratorEvents> {
         const toolMessage = buildToolResultMessage(toolResult)
         turnMessages.push(toolMessage)
         messages.push(toolMessage)
+        this.emit('tool-result', {
+          agentId: options.agent.id,
+          sessionId: options.sessionId,
+          toolResult,
+        })
         yield {
           type: 'tool_result',
           toolCallId: toolResult.toolCallId,
@@ -288,27 +451,34 @@ export class Orchestrator extends EventEmitter<OrchestratorEvents> {
   }
 
   /**
-   * Perform a multi-agent handoff.
-   * Returns the new agent to continue with.
+   * Validate and describe a handoff request.
+   * Roy returns the target agent and emits handoff context; the host app owns
+   * the surrounding workflow loop, retries, persistence, and scheduling.
    */
   async handoff(
     request: HandoffRequest,
     currentAgentId: string,
     cycleEngine: CycleEngine,
     lastMessageContent: string,
+    session?: ChatSession,
   ): Promise<AgentDefinition> {
+    const handoffContext = buildHandoffContext(request, session, lastMessageContent)
     const resolvedId = await cycleEngine.requestHandoff(currentAgentId, request.targetAgentId, {
       lastMessageContent,
-      metadata: {},
+      metadata: handoffContext ? { handoffContext } : {},
     })
 
     const hop = cycleEngine.getHistory().at(-1)
     if (hop) {
-      this.emit('agent-handoff', {
+      const event: HandoffEvent = {
         from: currentAgentId,
         to: resolvedId,
         hopNumber: hop.hopNumber,
-      })
+        contextMode: request.contextMode ?? 'full',
+        ...(handoffContext ? { handoffContext } : {}),
+      }
+      this.emit('handoff', event)
+      this.emit('agent-handoff', event)
     }
 
     return this.registry.get(resolvedId)
@@ -417,6 +587,64 @@ function messageText(message: Message | undefined): string {
       .flatMap((b) => (b.type === 'text' || b.type === 'summary' ? [b.text] : []))
       .join('\n') ?? ''
   )
+}
+
+function buildHandoffContext(
+  request: HandoffRequest,
+  session: ChatSession | undefined,
+  lastMessageContent: string,
+): HandoffContext | undefined {
+  if ((request.contextMode ?? 'full') !== 'summary') return undefined
+
+  const recentMessages = session?.messages.slice(-8) ?? []
+  const sourceMessageIds = recentMessages.map((m) => m.id)
+  const recentContext = recentMessages.map(serializeMessageForHandoff).join('\n\n')
+  const parts = [
+    request.reason ? `Reason: ${request.reason}` : '',
+    recentContext ? `Recent context:\n${recentContext}` : '',
+    lastMessageContent ? `Last message:\n${lastMessageContent}` : '',
+  ].filter(Boolean)
+
+  return {
+    mode: 'summary',
+    ...(request.reason ? { reason: request.reason } : {}),
+    summary: clampText(parts.join('\n\n'), 6_000),
+    sourceMessageIds,
+  }
+}
+
+function serializeMessageForHandoff(message: Message): string {
+  const text = message.content.map(serializeContentBlock).filter(Boolean).join('\n')
+  return `[${message.role}${message.agentId ? ` (${message.agentId})` : ''} #${message.id}]: ${text}`
+}
+
+function serializeContentBlock(block: Message['content'][number]): string {
+  switch (block.type) {
+    case 'text':
+      return block.text
+    case 'summary':
+      return `[summary replacing ${block.replacedCount} messages]: ${block.text}`
+    case 'tool_call':
+      return `[tool_call ${block.toolCall.name}#${block.toolCall.id}]: ${block.toolCall.arguments}`
+    case 'tool_result':
+      return `[tool_result ${block.toolResult.name}#${block.toolResult.toolCallId}${
+        block.toolResult.isError ? ' error' : ''
+      }]: ${serializeToolResult(block.toolResult.result)}`
+  }
+}
+
+function serializeToolResult(result: unknown): string {
+  if (typeof result === 'string') return result
+  try {
+    return JSON.stringify(result)
+  } catch {
+    return String(result)
+  }
+}
+
+function clampText(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text
+  return `${text.slice(0, maxChars)}\n[handoff context truncated]`
 }
 
 function errorMessage(error: unknown): string {

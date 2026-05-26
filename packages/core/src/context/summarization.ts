@@ -10,6 +10,7 @@ Your task is to compress the following conversation excerpt into a concise summa
 - All facts, figures, and specific details mentioned
 - All action items or next steps
 - User preferences or constraints stated
+- Tool calls made, tool results observed, and tool errors encountered
 - Any important context that would affect future responses
 
 Do NOT add any information not present in the input.
@@ -109,14 +110,11 @@ export class SummarizationStrategy implements CompactionStrategy {
     const toSummarize = compactable.slice(0, batchSize)
     const remaining = compactable.slice(batchSize)
 
-    // Serialize messages for the summary prompt
+    // Serialize every content block so tool calls/results survive compaction.
     const serialized = toSummarize
       .map((m) => {
-        const text = m.content
-          .filter((b) => b.type === 'text')
-          .map((b) => (b as any).text)
-          .join('\n')
-        return `[${m.role}${m.agentId ? ` (${m.agentId})` : ''}]: ${text}`
+        const text = m.content.map(serializeContentBlock).filter(Boolean).join('\n')
+        return `[${m.role}${m.agentId ? ` (${m.agentId})` : ''} #${m.id}]: ${text}`
       })
       .join('\n\n')
 
@@ -154,6 +152,7 @@ export class SummarizationStrategy implements CompactionStrategy {
       text: summaryText.trim(),
       replacedCount: toSummarize.length,
       originalTokens,
+      sourceMessageIds: toSummarize.map((m) => m.id),
     }
 
     const summaryMessage: Message = {
@@ -171,6 +170,31 @@ export class SummarizationStrategy implements CompactionStrategy {
       messages: resultMessages,
       tokensFreed: Math.max(0, tokensFreed),
       summary: `Summarized ${toSummarize.length} messages → ~${newTokens} tokens (freed ~${tokensFreed}).`,
+      compactedMessages: toSummarize,
     }
+  }
+}
+
+function serializeContentBlock(block: Message['content'][number]): string {
+  switch (block.type) {
+    case 'text':
+      return block.text
+    case 'summary':
+      return `[summary replacing ${block.replacedCount} messages]: ${block.text}`
+    case 'tool_call':
+      return `[tool_call ${block.toolCall.name}#${block.toolCall.id}]: ${block.toolCall.arguments}`
+    case 'tool_result':
+      return `[tool_result ${block.toolResult.name}#${block.toolResult.toolCallId}${
+        block.toolResult.isError ? ' error' : ''
+      }]: ${serializeToolResult(block.toolResult.result)}`
+  }
+}
+
+function serializeToolResult(result: unknown): string {
+  if (typeof result === 'string') return result
+  try {
+    return JSON.stringify(result)
+  } catch {
+    return String(result)
   }
 }

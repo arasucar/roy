@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
+import { CycleEngine } from '../src/agents/cycle-engine.js'
 import { Orchestrator } from '../src/agents/orchestrator.js'
 import { AgentRegistry } from '../src/agents/registry.js'
 import type { LLMProvider, SendOptions } from '../src/providers/types.js'
@@ -84,11 +85,11 @@ class FakePlanProvider implements LLMProvider {
     this.calls.push(options)
 
     if (this.calls.length === 1) {
-      yield { type: 'text' as const, delta: 'I have enough information. [PLAN_READY]' }
+      yield { type: 'text' as const, delta: 'I have enough information.' }
       yield { type: 'usage' as const, promptTokens: 10, completionTokens: 2 }
       yield {
         type: 'done' as const,
-        message: assistantMessage('I have enough information. [PLAN_READY]'),
+        message: assistantMessage('I have enough information.'),
       }
       return
     }
@@ -146,6 +147,24 @@ describe('Orchestrator tool loops', () => {
       const provider = new FakeToolProvider(providerType)
       const orchestrator = new Orchestrator(new AgentRegistry([agent]))
       vi.spyOn(orchestrator, 'getProvider').mockReturnValue(provider)
+      const runEvents: string[] = []
+      orchestrator.on('agent-start', () => runEvents.push('agent-start'))
+      orchestrator.on('tool-call', ({ toolCall }) => {
+        runEvents.push(`tool-call:${toolCall.name}`)
+        expect(toolCall.arguments).toBe('{"query":"roy"}')
+      })
+      orchestrator.on('tool-result', ({ toolResult }) => {
+        runEvents.push(`tool-result:${toolResult.name}`)
+      })
+      orchestrator.on('cost-updated', ({ cost }) => {
+        runEvents.push('cost-updated')
+        expect(cost.promptTokens).toBe(30)
+        expect(cost.completionTokens).toBe(7)
+      })
+      orchestrator.on('done', ({ message }) => {
+        runEvents.push('done')
+        expect(message.content[0]).toMatchObject({ type: 'text', text: 'Found Roy docs.' })
+      })
 
       const emitted = []
       for await (const chunk of orchestrator.runTurn(
@@ -199,12 +218,50 @@ describe('Orchestrator tool loops', () => {
           .join(''),
       ).toBe('Found Roy docs.')
       expect(emitted.at(-1)?.type).toBe('done')
+      expect(runEvents).toEqual([
+        'agent-start',
+        'tool-call:search',
+        'tool-result:search',
+        'cost-updated',
+        'done',
+      ])
     },
   )
 })
 
 describe('Orchestrator plan mode', () => {
-  it('emits plan-ready before awaiting approval and then emits plan-approved before done', async () => {
+  it('does not infer plan readiness from assistant text', async () => {
+    const events: string[] = []
+    const agent: AgentDefinition = {
+      id: 'assistant',
+      name: 'Assistant',
+      provider: { type: 'openrouter', apiKey: 'test-key' },
+      model: 'openai/gpt-4o-mini',
+      systemPrompt: 'Plan before acting.',
+      planMode: true,
+      onPlanApproval: async () => {
+        events.push('approval-callback')
+        return { approved: true }
+      },
+    }
+    const provider = new FakePlanProvider()
+    const orchestrator = new Orchestrator(new AgentRegistry([agent]))
+    vi.spyOn(orchestrator, 'getProvider').mockReturnValue(provider)
+    orchestrator.on('plan-ready', () => events.push('ready'))
+
+    for await (const chunk of orchestrator.runTurn(
+      agent,
+      session(),
+      message('user', 'Find Roy docs'),
+    )) {
+      if (chunk.type === 'done') events.push('done')
+    }
+
+    expect(provider.calls).toHaveLength(1)
+    expect(events).toEqual(['done'])
+  })
+
+  it('drafts a plan only when explicitly requested and emits approval-requested', async () => {
     const events: string[] = []
     let readyBeforeApproval = false
     const agent: AgentDefinition = {
@@ -228,6 +285,10 @@ describe('Orchestrator plan mode', () => {
       expect(plan.status).toBe('pending_approval')
       expect(plan.title).toBe('Search plan')
     })
+    orchestrator.on('approval-requested', ({ plan }) => {
+      events.push('approval-requested')
+      expect(plan.status).toBe('pending_approval')
+    })
     orchestrator.on('plan-approved', ({ plan }) => {
       events.push('approved')
       expect(plan.status).toBe('approved')
@@ -238,6 +299,7 @@ describe('Orchestrator plan mode', () => {
       agent,
       session(),
       message('user', 'Find Roy docs'),
+      { requestPlan: true },
     )) {
       if (chunk.type === 'done') events.push('done')
       emitted.push(chunk)
@@ -245,7 +307,7 @@ describe('Orchestrator plan mode', () => {
 
     expect(provider.calls).toHaveLength(2)
     expect(readyBeforeApproval).toBe(true)
-    expect(events).toEqual(['ready', 'approval-callback', 'approved', 'done'])
+    expect(events).toEqual(['ready', 'approval-requested', 'approval-callback', 'approved', 'done'])
     expect(emitted.at(-1)?.type).toBe('done')
   })
 
@@ -267,6 +329,7 @@ describe('Orchestrator plan mode', () => {
     const orchestrator = new Orchestrator(new AgentRegistry([agent]))
     vi.spyOn(orchestrator, 'getProvider').mockReturnValue(provider)
     orchestrator.on('plan-ready', () => events.push('ready'))
+    orchestrator.on('approval-requested', () => events.push('approval-requested'))
     orchestrator.on('plan-rejected', ({ plan }) => {
       events.push('rejected')
       expect(plan.status).toBe('rejected')
@@ -277,10 +340,104 @@ describe('Orchestrator plan mode', () => {
       agent,
       session(),
       message('user', 'Find Roy docs'),
+      { requestPlan: true },
     )) {
       if (chunk.type === 'done') events.push('done')
     }
 
-    expect(events).toEqual(['ready', 'rejected', 'done'])
+    expect(events).toEqual(['ready', 'approval-requested', 'rejected', 'done'])
+  })
+
+  it('can explicitly request a plan for an existing session', async () => {
+    const events: string[] = []
+    const agent: AgentDefinition = {
+      id: 'assistant',
+      name: 'Assistant',
+      provider: { type: 'openrouter', apiKey: 'test-key' },
+      model: 'openai/gpt-4o-mini',
+      systemPrompt: 'Plan before acting.',
+      planMode: true,
+      onPlanApproval: async () => ({ approved: true }),
+    }
+    const provider = new FakePlanProvider()
+    const orchestrator = new Orchestrator(new AgentRegistry([agent]))
+    vi.spyOn(orchestrator, 'getProvider').mockReturnValue(provider)
+    orchestrator.on('approval-requested', ({ plan }) => {
+      events.push(plan.status)
+    })
+
+    const plan = await orchestrator.requestPlan(
+      agent,
+      session([message('user', 'Find Roy docs'), message('assistant', 'I can draft a plan.')]),
+    )
+
+    expect(plan.status).toBe('approved')
+    expect(provider.calls).toHaveLength(1)
+    expect(events).toEqual(['pending_approval'])
+  })
+})
+
+describe('Orchestrator handoff context', () => {
+  it('emits a compact handoff context when summary mode is requested', async () => {
+    const agents: AgentDefinition[] = [
+      {
+        id: 'assistant',
+        name: 'Assistant',
+        provider: { type: 'openrouter', apiKey: 'test-key' },
+        model: 'openai/gpt-4o-mini',
+        systemPrompt: 'Help.',
+      },
+      {
+        id: 'specialist',
+        name: 'Specialist',
+        provider: { type: 'openrouter', apiKey: 'test-key' },
+        model: 'openai/gpt-4o-mini',
+        systemPrompt: 'Specialize.',
+      },
+    ]
+    const registry = new AgentRegistry(agents)
+    const orchestrator = new Orchestrator(registry)
+    const cycleEngine = new CycleEngine(registry, 'session_1')
+    const events: Array<{
+      from: string
+      to: string
+      hopNumber: number
+      contextMode: 'full' | 'summary'
+      handoffContext?: {
+        mode: 'summary'
+        reason?: string
+        summary: string
+        sourceMessageIds: string[]
+      }
+    }> = []
+
+    orchestrator.on('handoff', (event) => events.push(event))
+
+    const nextAgent = await orchestrator.handoff(
+      {
+        targetAgentId: 'specialist',
+        reason: 'Needs specialist review',
+        contextMode: 'summary',
+      },
+      'assistant',
+      cycleEngine,
+      'Last answer mentioned Roy compaction.',
+      session([message('user', 'Remember the source ids.'), message('assistant', 'Will do.')]),
+    )
+
+    expect(nextAgent.id).toBe('specialist')
+    expect(events[0]).toMatchObject({
+      from: 'assistant',
+      to: 'specialist',
+      hopNumber: 1,
+      contextMode: 'summary',
+      handoffContext: {
+        mode: 'summary',
+        reason: 'Needs specialist review',
+        sourceMessageIds: ['user-1', 'assistant-1'],
+      },
+    })
+    expect(events[0]?.handoffContext?.summary).toContain('Last answer mentioned Roy compaction.')
+    expect(events[0]?.handoffContext?.summary).toContain('Remember the source ids.')
   })
 })

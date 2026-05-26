@@ -12,6 +12,7 @@ import type {
 import type { CompactionStrategy, CompactionStrategyDescriptor } from './context/types.js'
 import { AgentRegistry } from './agents/registry.js'
 import { Orchestrator } from './agents/orchestrator.js'
+import type { OrchestratorEvents } from './agents/orchestrator.js'
 import { SessionManager } from './session/manager.js'
 import { MemoryStore } from './session/stores/memory-store.js'
 import { RollingCompactor } from './context/rolling.js'
@@ -72,18 +73,31 @@ export interface SendOptions<TInput = string> {
   metadata?: Record<string, unknown>
   /** Mark this message for memory extraction */
   memoryMarker?: import('./types/memory.js').MemoryMarker
+  /**
+   * In plan mode, explicitly request plan drafting after this turn. Roy does
+   * not infer plan readiness from assistant text.
+   */
+  requestPlan?: boolean
 }
 
 // ─── Roy instance events ──────────────────────────────────────────────────────
 
 export interface RoyEvents {
+  'agent-start': [OrchestratorEvents['agent-start'][0]]
+  'agent-end': [OrchestratorEvents['agent-end'][0]]
+  'tool-call': [OrchestratorEvents['tool-call'][0]]
+  'tool-result': [OrchestratorEvents['tool-result'][0]]
+  handoff: [OrchestratorEvents['handoff'][0]]
   compacted: [CompactionEvent]
   'session-rollover': [SessionRolloverEvent]
-  'agent-handoff': [{ from: string; to: string; hopNumber: number }]
+  'agent-handoff': [OrchestratorEvents['agent-handoff'][0]]
   'plan-ready': [{ plan: import('./types/agent.js').PlanDocument }]
+  'approval-requested': [{ plan: import('./types/agent.js').PlanDocument }]
   'plan-approved': [{ plan: import('./types/agent.js').PlanDocument }]
   'plan-rejected': [{ plan: import('./types/agent.js').PlanDocument }]
-  error: [Error]
+  'cost-updated': [OrchestratorEvents['cost-updated'][0]]
+  done: [OrchestratorEvents['done'][0]]
+  error: [OrchestratorEvents['error'][0]]
 }
 
 // ─── Roy instance ─────────────────────────────────────────────────────────────
@@ -110,11 +124,18 @@ export class Roy extends EventEmitter<RoyEvents> {
     this.orchestrator = new Orchestrator(this.registry, config.cost)
     this.costCalc = new CostCalculator(config.cost)
 
-    // Forward orchestrator events
+    // Forward stable host-app run events
+    this.orchestrator.on('agent-start', (e) => this.emit('agent-start', e))
+    this.orchestrator.on('agent-end', (e) => this.emit('agent-end', e))
+    this.orchestrator.on('tool-call', (e) => this.emit('tool-call', e))
+    this.orchestrator.on('tool-result', (e) => this.emit('tool-result', e))
+    this.orchestrator.on('handoff', (e) => this.emit('handoff', e))
     this.orchestrator.on('agent-handoff', (e) => this.emit('agent-handoff', e))
     this.orchestrator.on('plan-ready', (e) => this.emit('plan-ready', e))
+    this.orchestrator.on('approval-requested', (e) => this.emit('approval-requested', e))
     this.orchestrator.on('plan-approved', (e) => this.emit('plan-approved', e))
     this.orchestrator.on('plan-rejected', (e) => this.emit('plan-rejected', e))
+    this.orchestrator.on('error', (e) => this.emit('error', e))
 
     // Set up global memory if configured
     if (config.memory) {
@@ -169,33 +190,8 @@ export class Roy extends EventEmitter<RoyEvents> {
       }
     }
 
-    // Get or create the compactor for this session
-    let compactor = this.compactors.get(session.id)
-    if (!compactor) {
-      compactor = createRollingCompactor(agent, provider)
-
-      compactor.on('compacted', (e) => this.emit('compacted', e))
-      compactor.on('session-rollover', async (e) => {
-        await this.sessions.markRolledOver(session, e.newSessionId)
-        // Extract memory from the old session before it's gone (if configured)
-        if (this.memoryExtractor) {
-          const markedMessages = session.messages.filter((m) => m.metadata?.['memoryMarker'])
-          if (markedMessages.length > 0) {
-            await this.memoryExtractor.extractFromMessages(markedMessages, session.id)
-          }
-        }
-        // Clean up the old compactor — the new session will get a fresh one on next send
-        this.compactors.delete(session.id)
-        this.emit('session-rollover', e)
-      })
-
-      this.compactors.set(session.id, compactor)
-    }
-
-    // PRE-COMPACTION: check watermark before sending
-    session = await compactor.maybeCompact(session, provider, agent.model)
-
-    // Build user message
+    // Build the user message before compaction so the watermark check includes
+    // the incoming turn without letting compaction rewrite that fresh input.
     const userMessage: Message = {
       id: generateId(),
       role: 'user',
@@ -213,6 +209,43 @@ export class Roy extends EventEmitter<RoyEvents> {
       },
     }
 
+    // Get or create the compactor for this session
+    let compactor = this.compactors.get(session.id)
+    if (!compactor) {
+      compactor = createRollingCompactor(
+        agent,
+        provider,
+        this.memoryExtractor
+          ? (messages, context) =>
+              this.memoryExtractor!.extractFromMessages(messages, context.session.id)
+          : undefined,
+      )
+
+      compactor.on('compacted', (e) => this.emit('compacted', e))
+      compactor.on('session-rollover', async (e) => {
+        await this.sessions.save(e.newSession)
+        await this.sessions.markRolledOver(e.oldSession, e.newSessionId)
+        // Extract memory from the old session before it's gone (if configured)
+        if (this.memoryExtractor) {
+          const markedMessages = e.oldSession.messages.filter((m) => m.metadata?.['memoryMarker'])
+          if (markedMessages.length > 0) {
+            await this.memoryExtractor.extractFromMessages(markedMessages, e.oldSession.id)
+          }
+        }
+        // Clean up the old compactor — the new session will get a fresh one on next send
+        this.compactors.delete(e.oldSession.id)
+        this.emit('session-rollover', e)
+      })
+
+      this.compactors.set(session.id, compactor)
+    }
+
+    // PRE-COMPACTION: check watermark before sending
+    session = await compactor.maybeCompact(session, provider, agent.model, {
+      systemPrompt: effectiveSystemPrompt,
+      pendingMessages: [userMessage],
+    })
+
     // Extract memory from messages about to be compacted (if memory extractor set up)
     if (this.memoryExtractor && options.memoryMarker) {
       await this.memoryExtractor.extractFromMessages([userMessage], session.id)
@@ -229,7 +262,10 @@ export class Roy extends EventEmitter<RoyEvents> {
       { ...agent, systemPrompt: effectiveSystemPrompt },
       session,
       userMessage,
-      options.signal !== undefined ? { signal: options.signal } : {},
+      {
+        ...(options.signal !== undefined ? { signal: options.signal } : {}),
+        ...(options.requestPlan !== undefined ? { requestPlan: options.requestPlan } : {}),
+      },
     )) {
       if (chunk.type === 'usage') {
         promptTokens += chunk.promptTokens
@@ -271,7 +307,22 @@ export class Roy extends EventEmitter<RoyEvents> {
         for (const message of messagesToSave) {
           session = await this.sessions.appendMessage(session, message)
         }
+        session = await this.sessions.updateTokenBudget(
+          session,
+          provider.estimateTokens(session.messages, effectiveSystemPrompt),
+        )
 
+        this.emit('cost-updated', {
+          agentId,
+          sessionId: session.id,
+          cost: turnCost,
+        })
+        this.emit('done', {
+          agentId,
+          sessionId: session.id,
+          message: finalTurnMessage,
+          messages: messagesToSave,
+        })
         yield { ...chunk, message: finalTurnMessage, messages: messagesToSave }
         continue
       }
@@ -282,9 +333,13 @@ export class Roy extends EventEmitter<RoyEvents> {
     // still persist the user message so the session isn't left in a broken state.
     if (!finalMessage && !options.signal?.aborted) {
       const err = new Error('[Roy] Stream ended without a done chunk — provider may have errored.')
-      this.emit('error', err)
+      this.emit('error', { agentId, sessionId: session.id, error: err })
       // Still save the user message — the assistant turn is simply absent
-      await this.sessions.appendMessage(session, userMessage)
+      session = await this.sessions.appendMessage(session, userMessage)
+      await this.sessions.updateTokenBudget(
+        session,
+        provider.estimateTokens(session.messages, effectiveSystemPrompt),
+      )
     }
   }
 
@@ -306,6 +361,17 @@ export class Roy extends EventEmitter<RoyEvents> {
   /** List all sessions, optionally filtered by agent */
   async listSessions(agentId?: string): Promise<ChatSession[]> {
     return this.sessions.list(agentId)
+  }
+
+  /** Explicitly draft and gate a plan for an existing plan-mode session. */
+  async requestPlan(
+    sessionId: string,
+    agentId?: string,
+  ): Promise<import('./types/agent.js').PlanDocument> {
+    const session = await this.sessions.load(sessionId)
+    if (!session) throw new Error(`[Roy] Session "${sessionId}" not found.`)
+    const agent = this.registry.get(agentId ?? session.agentId)
+    return this.orchestrator.requestPlan(agent, session)
   }
 
   /** Branch a session at a specific message */
@@ -342,7 +408,7 @@ export class Roy extends EventEmitter<RoyEvents> {
  *
  * @example
  * ```ts
- * import { createChat } from '@roy/core'
+ * import { createChat } from '@chatroy/core'
  *
  * const roy = createChat({
  *   agents: [
@@ -366,10 +432,15 @@ export function createChat(config: RoyConfig): Roy {
   return new Roy(config)
 }
 
-function createRollingCompactor(agent: AgentDefinition, provider: LLMProvider): RollingCompactor {
+function createRollingCompactor(
+  agent: AgentDefinition,
+  provider: LLMProvider,
+  onMessagesCompacted?: RollingCompactorConfig['onMessagesCompacted'],
+): RollingCompactor {
   const compaction = agent.compaction ?? {}
   const summaryModel = compaction.summaryModel ?? agent.model
   const config: RollingCompactorConfig = { provider, summaryModel }
+  if (onMessagesCompacted) config.onMessagesCompacted = onMessagesCompacted
 
   if (compaction.triggerFraction !== undefined) config.triggerFraction = compaction.triggerFraction
   if (compaction.targetFraction !== undefined) config.targetFraction = compaction.targetFraction

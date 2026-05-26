@@ -54,11 +54,8 @@ export class MemoryExtractor {
 
       const messagesText = slotMessages
         .map((m) => {
-          const text = m.content
-            .filter((b) => b.type === 'text')
-            .map((b) => (b as any).text)
-            .join('\n')
-          return `[${m.role}]: ${text}`
+          const text = m.content.map(serializeContentBlock).filter(Boolean).join('\n')
+          return `[${m.role} #${m.id}]: ${text}`
         })
         .join('\n\n')
 
@@ -125,7 +122,9 @@ Return JSON only:`
         sourceSessionIds: [...(existing?.sourceSessionIds ?? []), sessionId].filter(
           (v, i, a) => a.indexOf(v) === i,
         ),
-        sourceMessageIds: [...(existing?.sourceMessageIds ?? []), ...messageIds],
+        sourceMessageIds: [...(existing?.sourceMessageIds ?? []), ...messageIds].filter(
+          (v, i, a) => a.indexOf(v) === i,
+        ),
         createdAt: existing?.createdAt ?? new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       }
@@ -157,6 +156,30 @@ Return JSON only:`
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function serializeContentBlock(block: Message['content'][number]): string {
+  switch (block.type) {
+    case 'text':
+      return block.text
+    case 'summary':
+      return `[summary replacing ${block.replacedCount} messages]: ${block.text}`
+    case 'tool_call':
+      return `[tool_call ${block.toolCall.name}#${block.toolCall.id}]: ${block.toolCall.arguments}`
+    case 'tool_result':
+      return `[tool_result ${block.toolResult.name}#${block.toolResult.toolCallId}${
+        block.toolResult.isError ? ' error' : ''
+      }]: ${serializeToolResult(block.toolResult.result)}`
+  }
+}
+
+function serializeToolResult(result: unknown): string {
+  if (typeof result === 'string') return result
+  try {
+    return JSON.stringify(result)
+  } catch {
+    return String(result)
+  }
 }
 
 // ─── In-memory store implementation ──────────────────────────────────────────

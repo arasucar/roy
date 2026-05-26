@@ -5,4 +5,17 @@ export { CycleEngineError } from './cycle-engine.js'
 export { PlanEngine } from './plan-engine.js'
 export type { PlanModeState } from './plan-engine.js'
 export { Orchestrator } from './orchestrator.js'
-export type { HandoffRequest, OrchestratorEvents } from './orchestrator.js'
+export type {
+  AgentEndEvent,
+  AgentRunEvent,
+  CostUpdatedEvent,
+  HandoffContext,
+  HandoffEvent,
+  HandoffRequest,
+  OrchestratorEvents,
+  PlanEvent,
+  RunDoneEvent,
+  RunErrorEvent,
+  ToolCallEvent,
+  ToolResultEvent,
+} from './orchestrator.js'
