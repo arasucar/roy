@@ -5,3 +5,11 @@ coverage/
 .DS_Store
 *.log
 _tmp_*
+
+# Local documentation / handoff artifacts
+HANDOVER.md
+BENCHMARK.md
+docs/
+
+# Workspace lockfile lives at the repo root.
+packages/*/pnpm-lock.yaml
