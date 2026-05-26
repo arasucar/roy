@@ -458,6 +458,11 @@ See [PUBLISHING.md](./PUBLISHING.md) for the release checklist.
 See [SECURITY.md](./SECURITY.md) for supported versions, vulnerability
 reporting, and package security practices.
 
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for local setup, pull request guidance,
+and the project boundaries Roy is trying to preserve.
+
 ## License
 
 MIT

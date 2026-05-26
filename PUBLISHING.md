@@ -38,23 +38,31 @@ Current release target: `0.2.0`.
    ```
 
 5. Commit the release prep.
-6. Tag the release:
+6. Confirm GitHub repository metadata is filled in:
+   - Description: `Roy is a TypeScript chat runtime for long-lived agent conversations.`
+   - Website: `https://www.npmjs.com/package/@chatroy/core`
+   - Topics: `llm`, `typescript`, `ai-agents`, `chat`,
+     `context-management`, `pgvector`, `agents`
+
+7. Tag the release:
 
    ```bash
    git tag v0.2.0
    ```
 
-7. Publish with npm 2FA:
+8. Publish with npm 2FA or an npm automation token:
 
    ```bash
    pnpm publish -r --access public --otp <code>
    ```
 
-8. Push the commit and tag:
+9. Push the commit and tag:
 
    ```bash
    git push origin main --follow-tags
    ```
+
+10. Publish a GitHub release from the tag using the matching changelog notes.
 
 ## Recommended Future Setup
 
