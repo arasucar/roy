@@ -4,9 +4,10 @@ import type { StorageAdapter, ChatSession } from '../../types/session.js'
  * In-process Map store. Zero config, zero persistence.
  * Use for development, testing, or single-process apps.
  */
-export class MemoryStore<TInput = unknown, TOutput = unknown>
-  implements StorageAdapter<TInput, TOutput>
-{
+export class MemoryStore<TInput = unknown, TOutput = unknown> implements StorageAdapter<
+  TInput,
+  TOutput
+> {
   private sessions = new Map<string, ChatSession<TInput, TOutput>>()
 
   async save(session: ChatSession<TInput, TOutput>): Promise<void> {

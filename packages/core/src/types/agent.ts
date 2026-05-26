@@ -5,9 +5,9 @@ import type { ProviderConfig } from './provider.js'
 // ─── Cycle configuration ─────────────────────────────────────────────────────
 
 export type LoopStrategy =
-  | 'break'     // Stop the cycle immediately when a loop is detected
-  | 'retry'     // Retry the current hop with a modified prompt
-  | 'escalate'  // Hand off to the next agent in the chain
+  | 'break' // Stop the cycle immediately when a loop is detected
+  | 'retry' // Retry the current hop with a modified prompt
+  | 'escalate' // Hand off to the next agent in the chain
 
 export interface CycleConfig {
   /** Maximum number of agent-to-agent hops before forcing a stop. Default: 10 */

@@ -203,9 +203,7 @@ describe('buildAnthropicSystem', () => {
   it('returns array form with cache_control when caching enabled', () => {
     const out = buildAnthropicSystem('be helpful', true)
     expect(Array.isArray(out)).toBe(true)
-    expect(
-      (out as Array<{ cache_control?: unknown }>)[0]!.cache_control,
-    ).toEqual({
+    expect((out as Array<{ cache_control?: unknown }>)[0]!.cache_control).toEqual({
       type: 'ephemeral',
     })
   })

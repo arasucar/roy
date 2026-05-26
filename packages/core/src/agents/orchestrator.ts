@@ -253,9 +253,7 @@ export class Orchestrator extends EventEmitter<OrchestratorEvents> {
       }
 
       if (iteration === MAX_TOOL_ITERATIONS) {
-        const error = new Error(
-          `[Roy] Tool loop exceeded ${MAX_TOOL_ITERATIONS} iterations.`,
-        )
+        const error = new Error(`[Roy] Tool loop exceeded ${MAX_TOOL_ITERATIONS} iterations.`)
         yield { type: 'error', error }
         const message = buildAssistantTextMessage(error.message)
         yield {
@@ -274,10 +272,7 @@ export class Orchestrator extends EventEmitter<OrchestratorEvents> {
       turnMessages.push(assistantToolMessage)
       messages.push(assistantToolMessage)
 
-      for (const toolResult of await executeToolCalls(
-        toolCalls,
-        options.tools ?? [],
-      )) {
+      for (const toolResult of await executeToolCalls(toolCalls, options.tools ?? [])) {
         const toolMessage = buildToolResultMessage(toolResult)
         turnMessages.push(toolMessage)
         messages.push(toolMessage)
@@ -286,9 +281,7 @@ export class Orchestrator extends EventEmitter<OrchestratorEvents> {
           toolCallId: toolResult.toolCallId,
           toolName: toolResult.name,
           result: toolResult.result,
-          ...(toolResult.isError !== undefined
-            ? { isError: toolResult.isError }
-            : {}),
+          ...(toolResult.isError !== undefined ? { isError: toolResult.isError } : {}),
         }
       }
     }
@@ -304,11 +297,10 @@ export class Orchestrator extends EventEmitter<OrchestratorEvents> {
     cycleEngine: CycleEngine,
     lastMessageContent: string,
   ): Promise<AgentDefinition> {
-    const resolvedId = await cycleEngine.requestHandoff(
-      currentAgentId,
-      request.targetAgentId,
-      { lastMessageContent, metadata: {} },
-    )
+    const resolvedId = await cycleEngine.requestHandoff(currentAgentId, request.targetAgentId, {
+      lastMessageContent,
+      metadata: {},
+    })
 
     const hop = cycleEngine.getHistory().at(-1)
     if (hop) {
@@ -346,10 +338,7 @@ async function executeToolCalls(
   return Promise.all(toolCalls.map((call) => executeToolCall(call, tools)))
 }
 
-async function executeToolCall(
-  call: ToolCall,
-  tools: ToolDefinition[],
-): Promise<ToolResult> {
+async function executeToolCall(call: ToolCall, tools: ToolDefinition[]): Promise<ToolResult> {
   const tool = tools.find((candidate) => candidate.name === call.name)
   if (!tool) {
     return toolError(call, `Tool "${call.name}" is not registered.`)
@@ -368,9 +357,7 @@ async function executeToolCall(
   }
 
   try {
-    const result = await (tool.execute as (input: unknown) => Promise<unknown>)(
-      parsed.data,
-    )
+    const result = await (tool.execute as (input: unknown) => Promise<unknown>)(parsed.data)
     return {
       toolCallId: call.id,
       name: call.name,
@@ -390,11 +377,7 @@ function toolError(call: ToolCall, message: string): ToolResult {
   }
 }
 
-function buildAssistantToolMessage(
-  text: string,
-  toolCalls: ToolCall[],
-  agentId: string,
-): Message {
+function buildAssistantToolMessage(text: string, toolCalls: ToolCall[], agentId: string): Message {
   return {
     id: generateId(),
     role: 'assistant',
@@ -431,9 +414,7 @@ function buildAssistantTextMessage(text: string): Message {
 function messageText(message: Message | undefined): string {
   return (
     message?.content
-      .flatMap((b) =>
-        b.type === 'text' || b.type === 'summary' ? [b.text] : [],
-      )
+      .flatMap((b) => (b.type === 'text' || b.type === 'summary' ? [b.text] : []))
       .join('\n') ?? ''
   )
 }

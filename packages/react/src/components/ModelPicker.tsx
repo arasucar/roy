@@ -1,6 +1,5 @@
 import React, { useState } from 'react'
 import type { ModelInfo, ProviderType } from '@roy/core'
-import { CostCalculator } from '@roy/core'
 
 export interface ModelPickerProps {
   models: ModelInfo[]
@@ -56,7 +55,10 @@ export function ModelPicker({ models, selectedModelId, onSelect, className }: Mo
               {providerModels.map((model) => (
                 <button
                   key={model.id}
-                  onClick={() => { onSelect(model); setOpen(false) }}
+                  onClick={() => {
+                    onSelect(model)
+                    setOpen(false)
+                  }}
                   className={`w-full text-left px-3 py-2.5 flex items-center justify-between hover:bg-accent text-sm transition-colors ${
                     model.id === selectedModelId ? 'bg-accent/50' : ''
                   }`}

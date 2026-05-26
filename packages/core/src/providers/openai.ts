@@ -10,9 +10,7 @@ async function getOpenAI() {
     const { default: OpenAI } = await import('openai')
     return OpenAI
   } catch {
-    throw new Error(
-      '[Roy] openai is required for the OpenAI provider. Run: npm install openai',
-    )
+    throw new Error('[Roy] openai is required for the OpenAI provider. Run: npm install openai')
   }
 }
 
@@ -40,9 +38,7 @@ export class OpenAIProvider implements LLMProvider {
     const client = new OpenAI({
       apiKey: this.apiKey,
       ...(this.baseUrl !== undefined ? { baseURL: this.baseUrl } : {}),
-      ...(this.organization !== undefined
-        ? { organization: this.organization }
-        : {}),
+      ...(this.organization !== undefined ? { organization: this.organization } : {}),
     })
 
     let promptTokens = 0
@@ -51,14 +47,10 @@ export class OpenAIProvider implements LLMProvider {
     let emittedUsage = false
     const toolState = new Map<number, OpenAIToolState>()
 
-    const streamResponse = await client.chat.completions.create(
-      buildOpenAIRequest(options),
-    )
+    const streamResponse = await client.chat.completions.create(buildOpenAIRequest(options))
 
     if (options.signal) {
-      options.signal.addEventListener('abort', () =>
-        streamResponse.controller.abort(),
-      )
+      options.signal.addEventListener('abort', () => streamResponse.controller.abort())
     }
 
     for await (const chunk of streamResponse) {
@@ -91,9 +83,7 @@ export class OpenAIProvider implements LLMProvider {
   estimateTokens(messages: Message[], systemPrompt?: string): number {
     const text = [
       systemPrompt ?? '',
-      ...messages.map((m) =>
-        m.content.map((b) => ('text' in b ? (b as any).text : '')).join(' '),
-      ),
+      ...messages.map((m) => m.content.map((b) => ('text' in b ? (b as any).text : '')).join(' ')),
     ].join(' ')
     return Math.ceil(text.length / 4)
   }
@@ -174,10 +164,7 @@ interface OpenAIStreamChunk {
   } | null
 }
 
-export function buildOpenAIMessages(
-  messages: Message[],
-  systemPrompt?: string,
-): OpenAIMessage[] {
+export function buildOpenAIMessages(messages: Message[], systemPrompt?: string): OpenAIMessage[] {
   const out: OpenAIMessage[] = []
   if (systemPrompt) {
     out.push({ role: 'system', content: systemPrompt })
@@ -205,14 +192,16 @@ function buildOpenAIMessage(msg: Message): OpenAIMessage[] {
   const text = messageText(msg)
   const toolCalls = msg.content
     .filter((b) => b.type === 'tool_call')
-    .map((b): OpenAIAssistantToolCall => ({
-      id: b.toolCall.id,
-      type: 'function',
-      function: {
-        name: b.toolCall.name,
-        arguments: b.toolCall.arguments,
-      },
-    }))
+    .map(
+      (b): OpenAIAssistantToolCall => ({
+        id: b.toolCall.id,
+        type: 'function',
+        function: {
+          name: b.toolCall.name,
+          arguments: b.toolCall.arguments,
+        },
+      }),
+    )
 
   if (msg.role === 'assistant' && toolCalls.length > 0) {
     return [
@@ -232,9 +221,7 @@ function buildOpenAIMessage(msg: Message): OpenAIMessage[] {
   ]
 }
 
-export function buildOpenAITools(
-  tools: ToolDefinition[] | undefined,
-): OpenAIToolDef[] {
+export function buildOpenAITools(tools: ToolDefinition[] | undefined): OpenAIToolDef[] {
   if (!tools || tools.length === 0) return []
   return tools.map((t) => ({
     type: 'function',
@@ -254,9 +241,7 @@ export function buildOpenAIRequest(options: SendOptions): OpenAIRequestBody {
     stream: true,
     max_tokens: options.maxTokens ?? 4096,
     stream_options: { include_usage: true },
-    ...(options.temperature !== undefined
-      ? { temperature: options.temperature }
-      : {}),
+    ...(options.temperature !== undefined ? { temperature: options.temperature } : {}),
     ...(tools.length > 0 ? { tools } : {}),
   }
 }
@@ -303,9 +288,7 @@ export function mapOpenAIStreamChunk(
 
 function messageText(msg: Message): string {
   return msg.content
-    .flatMap((b) =>
-      b.type === 'text' || b.type === 'summary' ? [b.text] : [],
-    )
+    .flatMap((b) => (b.type === 'text' || b.type === 'summary' ? [b.text] : []))
     .join('\n')
 }
 

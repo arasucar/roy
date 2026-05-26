@@ -17,9 +17,7 @@ function openRouterResponse(chunks: string[]) {
 }
 
 function mockOpenRouterStream(chunks: string[]) {
-  return vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-    openRouterResponse(chunks),
-  )
+  return vi.spyOn(globalThis, 'fetch').mockResolvedValue(openRouterResponse(chunks))
 }
 
 afterEach(() => {
@@ -83,18 +81,14 @@ describe('createChat OpenRouter integration', () => {
     })
 
     const text = emitted
-      .filter(
-        (chunk): chunk is Extract<StreamChunk, { type: 'text' }> =>
-          chunk.type === 'text',
-      )
+      .filter((chunk): chunk is Extract<StreamChunk, { type: 'text' }> => chunk.type === 'text')
       .map((chunk) => chunk.delta)
       .join('')
     expect(text).toBe('Hello from Roy')
     expect(emitted.filter((chunk) => chunk.type === 'usage')).toHaveLength(1)
 
     const done = emitted.find(
-      (chunk): chunk is Extract<StreamChunk, { type: 'done' }> =>
-        chunk.type === 'done',
+      (chunk): chunk is Extract<StreamChunk, { type: 'done' }> => chunk.type === 'done',
     )
     expect(done?.message.agentId).toBe('assistant')
     expect(done?.message.cost).toMatchObject({
@@ -200,18 +194,14 @@ describe('createChat OpenRouter integration', () => {
     ])
     expect(
       emitted
-        .filter(
-          (chunk): chunk is Extract<StreamChunk, { type: 'text' }> =>
-            chunk.type === 'text',
-        )
+        .filter((chunk): chunk is Extract<StreamChunk, { type: 'text' }> => chunk.type === 'text')
         .map((chunk) => chunk.delta)
         .join(''),
     ).toBe('Found Roy docs.')
     expect(emitted.filter((chunk) => chunk.type === 'usage')).toHaveLength(2)
 
     const done = emitted.find(
-      (chunk): chunk is Extract<StreamChunk, { type: 'done' }> =>
-        chunk.type === 'done',
+      (chunk): chunk is Extract<StreamChunk, { type: 'done' }> => chunk.type === 'done',
     )
     expect(done?.message.cost).toMatchObject({
       promptTokens: 30,

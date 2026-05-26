@@ -4,7 +4,10 @@
   "description": "Roy — TypeScript LLM chat library core. Multi-provider, rolling compaction, multi-agent, plan mode.",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "files": ["dist", "src"],
+  "files": [
+    "dist",
+    "src"
+  ],
   "exports": {
     ".": {
       "import": "./dist/index.js",
@@ -54,9 +57,15 @@
     "@google/generative-ai": "^0.14.0"
   },
   "peerDependenciesMeta": {
-    "@anthropic-ai/sdk": { "optional": true },
-    "openai": { "optional": true },
-    "@google/generative-ai": { "optional": true }
+    "@anthropic-ai/sdk": {
+      "optional": true
+    },
+    "openai": {
+      "optional": true
+    },
+    "@google/generative-ai": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "typescript": "^5.4.0",

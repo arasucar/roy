@@ -202,9 +202,7 @@ export const MODEL_PRICING: ModelInfo[] = [
   },
 ]
 
-export const PRICING_BY_ID: Map<string, ModelInfo> = new Map(
-  MODEL_PRICING.map((m) => [m.id, m]),
-)
+export const PRICING_BY_ID: Map<string, ModelInfo> = new Map(MODEL_PRICING.map((m) => [m.id, m]))
 
 export const PRICING_BY_PROVIDER: Map<ProviderType, ModelInfo[]> = new Map()
 for (const model of MODEL_PRICING) {

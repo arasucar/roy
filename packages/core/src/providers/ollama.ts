@@ -99,9 +99,7 @@ export class OllamaProvider implements LLMProvider {
   estimateTokens(messages: Message[], systemPrompt?: string): number {
     const text = [
       systemPrompt ?? '',
-      ...messages.map((m) =>
-        m.content.map((b) => ('text' in b ? (b as any).text : '')).join(' '),
-      ),
+      ...messages.map((m) => m.content.map((b) => ('text' in b ? (b as any).text : '')).join(' ')),
     ].join(' ')
     return Math.ceil(text.length / 4)
   }
@@ -182,10 +180,7 @@ interface OllamaChunk {
   } | null
 }
 
-export function buildOllamaMessages(
-  messages: Message[],
-  systemPrompt?: string,
-): OllamaMessage[] {
+export function buildOllamaMessages(messages: Message[], systemPrompt?: string): OllamaMessage[] {
   const out: OllamaMessage[] = []
   if (systemPrompt) {
     out.push({ role: 'system', content: systemPrompt })
@@ -213,14 +208,16 @@ function buildOllamaMessage(msg: Message): OllamaMessage[] {
   const text = messageText(msg)
   const toolCalls = msg.content
     .filter((b) => b.type === 'tool_call')
-    .map((b): OllamaAssistantToolCall => ({
-      id: b.toolCall.id,
-      type: 'function',
-      function: {
-        name: b.toolCall.name,
-        arguments: b.toolCall.arguments,
-      },
-    }))
+    .map(
+      (b): OllamaAssistantToolCall => ({
+        id: b.toolCall.id,
+        type: 'function',
+        function: {
+          name: b.toolCall.name,
+          arguments: b.toolCall.arguments,
+        },
+      }),
+    )
 
   if (msg.role === 'assistant' && toolCalls.length > 0) {
     return [
@@ -240,9 +237,7 @@ function buildOllamaMessage(msg: Message): OllamaMessage[] {
   ]
 }
 
-export function buildOllamaTools(
-  tools: ToolDefinition[] | undefined,
-): OllamaToolDef[] {
+export function buildOllamaTools(tools: ToolDefinition[] | undefined): OllamaToolDef[] {
   if (!tools || tools.length === 0) return []
   return tools.map((t) => ({
     type: 'function',
@@ -260,12 +255,8 @@ export function buildOllamaBody(options: SendOptions): OllamaRequestBody {
     model: options.model,
     messages: buildOllamaMessages(options.messages, options.systemPrompt),
     stream: true,
-    ...(options.maxTokens !== undefined
-      ? { max_tokens: options.maxTokens }
-      : {}),
-    ...(options.temperature !== undefined
-      ? { temperature: options.temperature }
-      : {}),
+    ...(options.maxTokens !== undefined ? { max_tokens: options.maxTokens } : {}),
+    ...(options.temperature !== undefined ? { temperature: options.temperature } : {}),
     ...(tools.length > 0 ? { tools } : {}),
   }
 }
@@ -322,9 +313,7 @@ function* parseOllamaLines(
 
 function messageText(msg: Message): string {
   return msg.content
-    .flatMap((b) =>
-      b.type === 'text' || b.type === 'summary' ? [b.text] : [],
-    )
+    .flatMap((b) => (b.type === 'text' || b.type === 'summary' ? [b.text] : []))
     .join('\n')
 }
 

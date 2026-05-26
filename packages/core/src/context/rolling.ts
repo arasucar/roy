@@ -119,9 +119,7 @@ export class RollingCompactor extends EventEmitter<RollingCompactorEvents> {
     this.maxPasses = config.maxPasses ?? 3
 
     if (!(this.triggerFraction > 0 && this.triggerFraction <= 1)) {
-      throw new Error(
-        `[Roy] triggerFraction must be in (0,1], got ${this.triggerFraction}`,
-      )
+      throw new Error(`[Roy] triggerFraction must be in (0,1], got ${this.triggerFraction}`)
     }
     if (!(this.targetFraction > 0 && this.targetFraction < this.triggerFraction)) {
       throw new Error(
@@ -149,7 +147,10 @@ export class RollingCompactor extends EventEmitter<RollingCompactorEvents> {
    * Compute the absolute token thresholds for a given model.
    * Exposed for tests + UI ("we'll compact at N tokens, target M").
    */
-  budget(provider: LLMProvider, model: string): {
+  budget(
+    provider: LLMProvider,
+    model: string,
+  ): {
     windowSize: number
     inputBudget: number
     triggerAt: number
@@ -204,13 +205,7 @@ export class RollingCompactor extends EventEmitter<RollingCompactorEvents> {
 
     // ── Escalation 2..N: summarisation passes ────────────────────────────────
     while (this.passCount < this.maxPasses) {
-      const summarised = await this.runStep(
-        working,
-        provider,
-        model,
-        this.strategy,
-        'summarized',
-      )
+      const summarised = await this.runStep(working, provider, model, this.strategy, 'summarized')
       if (!summarised) break // strategy can't compact further
       working = summarised
       if (working.cumulativeTokens < budget.targetAt) return working

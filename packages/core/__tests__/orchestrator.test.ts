@@ -139,10 +139,7 @@ describe('Orchestrator tool loops', () => {
           providerType === 'anthropic'
             ? { type: 'anthropic', apiKey: 'test-key' }
             : { type: 'gemini', apiKey: 'test-key' },
-        model:
-          providerType === 'anthropic'
-            ? 'claude-sonnet-4-6'
-            : 'gemini-1.5-flash',
+        model: providerType === 'anthropic' ? 'claude-sonnet-4-6' : 'gemini-1.5-flash',
         systemPrompt: 'Use tools when useful.',
         tools: [searchTool],
       }

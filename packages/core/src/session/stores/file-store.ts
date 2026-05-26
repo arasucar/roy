@@ -11,9 +11,10 @@ import type { StorageAdapter, ChatSession } from '../../types/session.js'
  * const store = new FileStore('./roy-sessions')
  * ```
  */
-export class FileStore<TInput = unknown, TOutput = unknown>
-  implements StorageAdapter<TInput, TOutput>
-{
+export class FileStore<TInput = unknown, TOutput = unknown> implements StorageAdapter<
+  TInput,
+  TOutput
+> {
   constructor(private readonly directory: string) {}
 
   private async ensureDir(): Promise<void> {

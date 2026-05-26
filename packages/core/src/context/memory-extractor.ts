@@ -1,5 +1,10 @@
 import type { Message } from '../types/message.js'
-import type { MemorySchema, MemoryEntry, MemoryStorageAdapter, GlobalMemory } from '../types/memory.js'
+import type {
+  MemorySchema,
+  MemoryEntry,
+  MemoryStorageAdapter,
+  GlobalMemory,
+} from '../types/memory.js'
 import type { LLMProvider } from '../providers/types.js'
 import { generateId } from '../utils/id.js'
 
@@ -25,14 +30,9 @@ export class MemoryExtractor {
    * Extract memory from a set of messages that are about to be compacted.
    * Call this before running the compaction strategy.
    */
-  async extractFromMessages(
-    messages: Message[],
-    sessionId: string,
-  ): Promise<void> {
+  async extractFromMessages(messages: Message[], sessionId: string): Promise<void> {
     // Find messages with memory markers
-    const markedMessages = messages.filter(
-      (m) => m.metadata?.['memoryMarker'] !== undefined,
-    )
+    const markedMessages = messages.filter((m) => m.metadata?.['memoryMarker'] !== undefined)
 
     if (markedMessages.length === 0) return
 
@@ -109,7 +109,11 @@ Return JSON only:`
         newValue = extracted
       } else if (strategy === 'merge' && isRecord(extracted) && isRecord(existing.value)) {
         newValue = { ...(existing.value as object), ...(extracted as object) }
-      } else if (strategy === 'append' && Array.isArray(existing.value) && Array.isArray(extracted)) {
+      } else if (
+        strategy === 'append' &&
+        Array.isArray(existing.value) &&
+        Array.isArray(extracted)
+      ) {
         newValue = [...existing.value, ...extracted]
       } else {
         newValue = extracted

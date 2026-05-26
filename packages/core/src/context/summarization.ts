@@ -78,10 +78,7 @@ export class SummarizationStrategy implements CompactionStrategy {
     return compactable.length >= this.minMessages
   }
 
-  async compact(
-    messages: Message[],
-    context: CompactionContext,
-  ): Promise<CompactionResult | null> {
+  async compact(messages: Message[], context: CompactionContext): Promise<CompactionResult | null> {
     if (!this.canCompact(messages, context)) return null
 
     const provider = this.provider
@@ -120,7 +117,7 @@ export class SummarizationStrategy implements CompactionStrategy {
     if (!this.model) {
       throw new Error(
         '[Roy] SummarizationStrategy requires a model. Set compaction.summaryModel in your AgentDefinition, ' +
-        'or pass model in SummarizationConfig. Use a fast, cheap model (e.g. "gpt-4o-mini" for OpenAI or "openai/gpt-4o-mini" for OpenRouter).',
+          'or pass model in SummarizationConfig. Use a fast, cheap model (e.g. "gpt-4o-mini" for OpenAI or "openai/gpt-4o-mini" for OpenRouter).',
       )
     }
 

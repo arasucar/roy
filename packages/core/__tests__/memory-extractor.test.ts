@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
-import {
-  InMemoryMemoryStore,
-  MemoryExtractor,
-} from '../src/context/memory-extractor.js'
+import { InMemoryMemoryStore, MemoryExtractor } from '../src/context/memory-extractor.js'
 import type { LLMProvider, SendOptions } from '../src/providers/types.js'
 import type { Message } from '../src/types/message.js'
 import type { MemorySchema } from '../src/types/memory.js'

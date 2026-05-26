@@ -36,11 +36,7 @@ afterEach(() => {
 describe('buildOpenRouterMessages', () => {
   it('puts system prompt first and maps non-assistant messages to user', () => {
     const out = buildOpenRouterMessages(
-      [
-        msg('system', 'ignored system'),
-        msg('user', 'hello'),
-        msg('assistant', 'hi'),
-      ],
+      [msg('system', 'ignored system'), msg('user', 'hello'), msg('assistant', 'hi')],
       'be useful',
     )
     expect(out).toEqual([
@@ -190,8 +186,7 @@ describe('OpenRouterProvider.stream', () => {
       new Response(
         new ReadableStream({
           start(controller) {
-            for (const chunk of chunks)
-              controller.enqueue(encoder.encode(chunk))
+            for (const chunk of chunks) controller.enqueue(encoder.encode(chunk))
             controller.close()
           },
         }),

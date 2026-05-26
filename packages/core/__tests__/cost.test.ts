@@ -39,9 +39,9 @@ describe('CostCalculator', () => {
 
   it("throws when onMissingModel='throw'", () => {
     const c = new CostCalculator({ onMissingModel: 'throw' })
-    expect(() =>
-      c.calculate('unknown', { promptTokens: 1, completionTokens: 1 }),
-    ).toThrow(/No pricing/)
+    expect(() => c.calculate('unknown', { promptTokens: 1, completionTokens: 1 })).toThrow(
+      /No pricing/,
+    )
   })
 
   it("is silent when onMissingModel='zero'", () => {

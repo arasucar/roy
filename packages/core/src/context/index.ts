@@ -12,9 +12,5 @@ export type { SummarizationConfig } from './summarization.js'
 export { ToolOutputTruncationStrategy } from './truncate.js'
 export type { ToolOutputTruncateConfig } from './truncate.js'
 export { RollingCompactor } from './rolling.js'
-export type {
-  RollingCompactorConfig,
-  CompactionEvent,
-  SessionRolloverEvent,
-} from './rolling.js'
+export type { RollingCompactorConfig, CompactionEvent, SessionRolloverEvent } from './rolling.js'
 export { MemoryExtractor, InMemoryMemoryStore } from './memory-extractor.js'

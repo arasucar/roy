@@ -41,8 +41,6 @@ describe('zodToObjectJsonSchema', () => {
   })
 
   it('throws for non-object tool parameter schemas', () => {
-    expect(() => zodToObjectJsonSchema(z.string())).toThrow(
-      'Tool parameters must be a z.object',
-    )
+    expect(() => zodToObjectJsonSchema(z.string())).toThrow('Tool parameters must be a z.object')
   })
 })

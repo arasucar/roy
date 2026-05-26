@@ -32,6 +32,12 @@ jobs:
       - name: Test core
         run: pnpm -F @roy/core test
 
+      - name: Lint
+        run: pnpm lint
+
+      - name: Format
+        run: pnpm format:check
+
       - name: Typecheck
         run: pnpm typecheck
 

@@ -28,7 +28,10 @@ export class SlidingWindowStrategy implements CompactionStrategy {
     return messages.length > this.keepLastN
   }
 
-  async compact(messages: Message[], _context: CompactionContext): Promise<CompactionResult | null> {
+  async compact(
+    messages: Message[],
+    _context: CompactionContext,
+  ): Promise<CompactionResult | null> {
     if (!this.canCompact(messages, _context)) return null
 
     const systemMessages = this.preserveSystem
@@ -46,9 +49,17 @@ export class SlidingWindowStrategy implements CompactionStrategy {
     return {
       messages: result,
       tokensFreed: Math.ceil(
-        dropped * (messages.reduce((sum, m) =>
-          sum + m.content.map((b) => ('text' in b ? (b as any).text.length : 0)).reduce((a, b) => a + b, 0),
-          0) / messages.length / 4),
+        dropped *
+          (messages.reduce(
+            (sum, m) =>
+              sum +
+              m.content
+                .map((b) => ('text' in b ? (b as any).text.length : 0))
+                .reduce((a, b) => a + b, 0),
+            0,
+          ) /
+            messages.length /
+            4),
       ),
       summary: `SlidingWindow: dropped ${dropped} oldest messages, kept last ${kept.length}.`,
     }

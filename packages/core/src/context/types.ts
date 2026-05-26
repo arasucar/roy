@@ -38,10 +38,7 @@ export interface CompactionStrategy {
    * Must return a smaller message list — if it cannot, return null to signal
    * that compaction is impossible and a session rollover is needed.
    */
-  compact(
-    messages: Message[],
-    context: CompactionContext,
-  ): Promise<CompactionResult | null>
+  compact(messages: Message[], context: CompactionContext): Promise<CompactionResult | null>
 
   /**
    * Estimate whether compaction is possible given the current state.

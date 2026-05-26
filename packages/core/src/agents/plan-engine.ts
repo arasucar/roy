@@ -1,9 +1,4 @@
-import type {
-  PlanDocument,
-  PlanStep,
-  PlanStatus,
-  PlanApprovalCallback,
-} from '../types/agent.js'
+import type { PlanDocument, PlanStep, PlanApprovalCallback } from '../types/agent.js'
 import type { Message } from '../types/message.js'
 import type { LLMProvider } from '../providers/types.js'
 import { generateId } from '../utils/id.js'
@@ -172,7 +167,9 @@ export class PlanEngine {
       planData = {
         title: 'Execution Plan',
         goal: 'Complete the requested task',
-        steps: [{ order: 1, title: 'Execute task', description: responseText, hasSideEffects: true }],
+        steps: [
+          { order: 1, title: 'Execute task', description: responseText, hasSideEffects: true },
+        ],
       }
     }
 

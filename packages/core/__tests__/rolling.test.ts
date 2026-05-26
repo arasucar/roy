@@ -172,8 +172,6 @@ describe('RollingCompactor — config validation', () => {
     expect(() => new RollingCompactor({ triggerFraction: 1.5 })).toThrow()
   })
   it('rejects targetFraction >= triggerFraction', () => {
-    expect(
-      () => new RollingCompactor({ triggerFraction: 0.5, targetFraction: 0.6 }),
-    ).toThrow()
+    expect(() => new RollingCompactor({ triggerFraction: 0.5, targetFraction: 0.6 })).toThrow()
   })
 })

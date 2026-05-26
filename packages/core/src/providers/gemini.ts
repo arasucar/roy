@@ -33,15 +33,11 @@ export class GeminiProvider implements LLMProvider {
     const { GoogleGenerativeAI } = await getGoogleAI()
     const genAI = new GoogleGenerativeAI(this.apiKey)
     const model = genAI.getGenerativeModel(
-      buildGeminiModelParams(options) as unknown as Parameters<
-        typeof genAI.getGenerativeModel
-      >[0],
+      buildGeminiModelParams(options) as unknown as Parameters<typeof genAI.getGenerativeModel>[0],
     )
     const chat = model.startChat(buildGeminiStartChatParams(options))
     const result = await chat.sendMessageStream(
-      buildGeminiUserRequest(options.messages) as Parameters<
-        typeof chat.sendMessageStream
-      >[0],
+      buildGeminiUserRequest(options.messages) as Parameters<typeof chat.sendMessageStream>[0],
     )
 
     let fullText = ''
@@ -75,9 +71,7 @@ export class GeminiProvider implements LLMProvider {
   estimateTokens(messages: Message[], systemPrompt?: string): number {
     const text = [
       systemPrompt ?? '',
-      ...messages.map((m) =>
-        m.content.map((b) => ('text' in b ? (b as any).text : '')).join(' '),
-      ),
+      ...messages.map((m) => m.content.map((b) => ('text' in b ? (b as any).text : '')).join(' ')),
     ].join(' ')
     return Math.ceil(text.length / 4)
   }
@@ -107,23 +101,14 @@ interface GeminiFunctionResponsePart {
   }
 }
 
-type GeminiPart =
-  | GeminiTextPart
-  | GeminiFunctionCallPart
-  | GeminiFunctionResponsePart
+type GeminiPart = GeminiTextPart | GeminiFunctionCallPart | GeminiFunctionResponsePart
 
 interface GeminiContent {
   role: 'user' | 'model'
   parts: GeminiPart[]
 }
 
-type GeminiSchemaType =
-  | 'STRING'
-  | 'NUMBER'
-  | 'INTEGER'
-  | 'BOOLEAN'
-  | 'ARRAY'
-  | 'OBJECT'
+type GeminiSchemaType = 'STRING' | 'NUMBER' | 'INTEGER' | 'BOOLEAN' | 'ARRAY' | 'OBJECT'
 
 interface GeminiSchema {
   type: GeminiSchemaType
@@ -214,9 +199,7 @@ export function buildGeminiUserRequest(messages: Message[]): GeminiUserRequest {
   return parts.length > 0 ? parts : ''
 }
 
-export function buildGeminiTools(
-  tools: ToolDefinition[] | undefined,
-): GeminiToolDef[] {
+export function buildGeminiTools(tools: ToolDefinition[] | undefined): GeminiToolDef[] {
   if (!tools || tools.length === 0) return []
   return [
     {
@@ -229,31 +212,23 @@ export function buildGeminiTools(
   ]
 }
 
-export function buildGeminiModelParams(
-  options: SendOptions,
-): GeminiModelParams {
+export function buildGeminiModelParams(options: SendOptions): GeminiModelParams {
   const tools = buildGeminiTools(options.tools)
   const generationConfig = buildGeminiGenerationConfig(options)
 
   return {
     model: options.model,
-    ...(options.systemPrompt !== undefined
-      ? { systemInstruction: options.systemPrompt }
-      : {}),
+    ...(options.systemPrompt !== undefined ? { systemInstruction: options.systemPrompt } : {}),
     ...(generationConfig !== undefined ? { generationConfig } : {}),
     ...(tools.length > 0 ? { tools } : {}),
   }
 }
 
-export function buildGeminiStartChatParams(
-  options: SendOptions,
-): GeminiStartChatParams {
+export function buildGeminiStartChatParams(options: SendOptions): GeminiStartChatParams {
   return { history: buildGeminiHistory(options.messages) }
 }
 
-export function mapGeminiStreamChunk(
-  chunk: GeminiStreamChunkLike,
-): StreamChunk[] {
+export function mapGeminiStreamChunk(chunk: GeminiStreamChunkLike): StreamChunk[] {
   const out: StreamChunk[] = []
   const text = readGeminiText(chunk)
   if (text) {
@@ -389,9 +364,7 @@ function normalizeJsonSchemaProperty(schema: {
   items?: unknown
   required?: string[]
 } {
-  const variants = schema.anyOf
-    ?.filter(isRecord)
-    .filter((item) => item.type !== 'null')
+  const variants = schema.anyOf?.filter(isRecord).filter((item) => item.type !== 'null')
   const fallback = variants?.[0]
   const rawType = schemaTypeValue(fallback?.type) ?? schema.type
   const nullable =
@@ -401,9 +374,7 @@ function normalizeJsonSchemaProperty(schema: {
   return {
     type: jsonSchemaTypeToGeminiType(rawType),
     nullable,
-    ...(schema.description !== undefined
-      ? { description: schema.description }
-      : {}),
+    ...(schema.description !== undefined ? { description: schema.description } : {}),
     ...(Array.isArray(schema.enum) ? { enum: schema.enum } : {}),
     ...(fallback?.properties !== undefined
       ? { properties: fallback.properties as Record<string, unknown> }
@@ -423,12 +394,8 @@ function normalizeJsonSchemaProperty(schema: {
   }
 }
 
-function jsonSchemaTypeToGeminiType(
-  type: string | string[] | undefined,
-): GeminiSchemaType {
-  const normalized = Array.isArray(type)
-    ? type.find((item) => item !== 'null')
-    : type
+function jsonSchemaTypeToGeminiType(type: string | string[] | undefined): GeminiSchemaType {
+  const normalized = Array.isArray(type) ? type.find((item) => item !== 'null') : type
   if (normalized === 'number') return 'NUMBER'
   if (normalized === 'integer') return 'INTEGER'
   if (normalized === 'boolean') return 'BOOLEAN'
@@ -441,9 +408,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function schemaTypeValue(
-  value: unknown,
-): string | string[] | undefined {
+function schemaTypeValue(value: unknown): string | string[] | undefined {
   if (typeof value === 'string') return value
   if (Array.isArray(value) && value.every((item) => typeof item === 'string')) {
     return value

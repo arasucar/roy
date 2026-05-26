@@ -101,25 +101,17 @@ export class CostCalculator {
    */
   calculate(modelId: string, promptTokens: number, completionTokens: number): TurnCost
   calculate(modelId: string, usage: CalculateInput): TurnCost
-  calculate(
-    modelId: string,
-    arg2: number | CalculateInput,
-    arg3?: number,
-  ): TurnCost {
+  calculate(modelId: string, arg2: number | CalculateInput, arg3?: number): TurnCost {
     const usage: CalculateInput =
-      typeof arg2 === 'number'
-        ? { promptTokens: arg2, completionTokens: arg3 ?? 0 }
-        : arg2
+      typeof arg2 === 'number' ? { promptTokens: arg2, completionTokens: arg3 ?? 0 } : arg2
 
     const override = this.overrides?.[modelId]
     const base = PRICING_BY_ID.get(modelId)
 
     const inputPrice = override?.inputPricePerMillion ?? base?.inputPricePerMillion
     const outputPrice = override?.outputPricePerMillion ?? base?.outputPricePerMillion
-    const cacheWritePrice =
-      override?.cacheWritePricePerMillion ?? base?.cacheWritePricePerMillion
-    const cacheReadPrice =
-      override?.cacheReadPricePerMillion ?? base?.cacheReadPricePerMillion
+    const cacheWritePrice = override?.cacheWritePricePerMillion ?? base?.cacheWritePricePerMillion
+    const cacheReadPrice = override?.cacheReadPricePerMillion ?? base?.cacheReadPricePerMillion
 
     const cacheCreation = usage.cacheCreationInputTokens ?? 0
     const cacheRead = usage.cacheReadInputTokens ?? 0
@@ -205,9 +197,7 @@ export class CostCalculator {
    * List all known models, optionally filtered by provider.
    */
   listModels(provider?: ModelInfo['provider']): ModelInfo[] {
-    return provider
-      ? MODEL_PRICING.filter((m) => m.provider === provider)
-      : MODEL_PRICING
+    return provider ? MODEL_PRICING.filter((m) => m.provider === provider) : MODEL_PRICING
   }
 
   /**

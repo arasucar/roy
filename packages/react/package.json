@@ -4,7 +4,10 @@
   "description": "Roy — React UI components (shadcn/ui) for the Roy LLM chat library.",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "files": ["dist", "src"],
+  "files": [
+    "dist",
+    "src"
+  ],
   "exports": {
     ".": {
       "import": "./dist/index.js",

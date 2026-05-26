@@ -82,11 +82,15 @@ describe('ToolOutputTruncationStrategy', () => {
   })
 
   it('does not mutate the original messages array', async () => {
-    const s = new ToolOutputTruncationStrategy({ maxToolOutputChars: 100, keepRecentToolResults: 0 })
+    const s = new ToolOutputTruncationStrategy({
+      maxToolOutputChars: 100,
+      keepRecentToolResults: 0,
+    })
     const original = 'L'.repeat(5_000)
     const messages = [toolResultMsg('1', original)]
     await s.compact(messages, ctx(messages))
-    const stillBig = (messages[0]!.content[0] as { toolResult: { result: string } }).toolResult.result
+    const stillBig = (messages[0]!.content[0] as { toolResult: { result: string } }).toolResult
+      .result
     expect(stillBig).toBe(original) // input untouched
   })
 

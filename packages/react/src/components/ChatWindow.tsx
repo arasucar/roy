@@ -55,14 +55,13 @@ export function ChatWindow({
           <div className="w-2 h-2 rounded-full bg-green-500" />
           <span className="text-sm font-semibold">{agentName ?? 'Assistant'}</span>
           {isCompacting && (
-            <span className="text-xs text-muted-foreground animate-pulse">
-              compacting…
-            </span>
+            <span className="text-xs text-muted-foreground animate-pulse">compacting…</span>
           )}
         </div>
         {sessionCostUsd !== undefined && (
           <span className="text-xs text-muted-foreground font-mono">
-            ~{sessionCostUsd < 0.001
+            ~
+            {sessionCostUsd < 0.001
               ? `$${sessionCostUsd.toExponential(2)}`
               : `$${sessionCostUsd.toFixed(4)}`}
           </span>
@@ -70,10 +69,7 @@ export function ChatWindow({
       </div>
 
       {/* Message list */}
-      <div
-        ref={scrollRef}
-        className="flex-1 overflow-y-auto px-4 py-3 space-y-3"
-      >
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
         {messages.map((msg) => (
           <MessageBubble key={msg.id} message={msg} />
         ))}
@@ -137,9 +133,7 @@ function MessageBubble({ message }: { message: Message }) {
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div
         className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${
-          isUser
-            ? 'bg-primary text-primary-foreground'
-            : 'bg-muted text-muted-foreground'
+          isUser ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
         }`}
       >
         <p className="whitespace-pre-wrap">{text}</p>

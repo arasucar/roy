@@ -110,7 +110,7 @@ export class CycleEngine {
         case 'retry':
           // Signal that the orchestrator should retry the current agent
           return currentAgentId
-        case 'escalate':
+        case 'escalate': {
           // Find the next available agent in the registry that hasn't been visited
           const visitedIds = new Set(this.hops.flatMap((h) => [h.fromAgentId, h.toAgentId]))
           const nextAgent = this.registry.all().find((a) => !visitedIds.has(a.id))
@@ -122,6 +122,7 @@ export class CycleEngine {
           }
           targetAgentId = nextAgent.id
           break
+        }
       }
     }
 

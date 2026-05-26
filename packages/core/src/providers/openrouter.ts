@@ -26,21 +26,14 @@ export class OpenRouterProvider implements LLMProvider {
 
   async *stream(options: SendOptions): AsyncIterable<StreamChunk> {
     const body = buildOpenRouterBody(options, this.fallbackModel)
-    const headers = buildOpenRouterHeaders(
-      this.apiKey,
-      this.appName,
-      this.siteUrl,
-    )
+    const headers = buildOpenRouterHeaders(this.apiKey, this.appName, this.siteUrl)
 
-    const response = await fetch(
-      'https://openrouter.ai/api/v1/chat/completions',
-      {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(body),
-        ...(options.signal !== undefined ? { signal: options.signal } : {}),
-      },
-    )
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      ...(options.signal !== undefined ? { signal: options.signal } : {}),
+    })
 
     if (!response.ok) {
       const err = await response.text()
@@ -117,9 +110,7 @@ export class OpenRouterProvider implements LLMProvider {
   estimateTokens(messages: Message[], systemPrompt?: string): number {
     const text = [
       systemPrompt ?? '',
-      ...messages.map((m) =>
-        m.content.map((b) => ('text' in b ? (b as any).text : '')).join(' '),
-      ),
+      ...messages.map((m) => m.content.map((b) => ('text' in b ? (b as any).text : '')).join(' ')),
     ].join(' ')
     return Math.ceil(text.length / 4)
   }
@@ -234,14 +225,16 @@ function buildOpenRouterMessage(msg: Message): OpenRouterMessage[] {
   const text = messageText(msg)
   const toolCalls = msg.content
     .filter((b) => b.type === 'tool_call')
-    .map((b): OpenRouterAssistantToolCall => ({
-      id: b.toolCall.id,
-      type: 'function',
-      function: {
-        name: b.toolCall.name,
-        arguments: b.toolCall.arguments,
-      },
-    }))
+    .map(
+      (b): OpenRouterAssistantToolCall => ({
+        id: b.toolCall.id,
+        type: 'function',
+        function: {
+          name: b.toolCall.name,
+          arguments: b.toolCall.arguments,
+        },
+      }),
+    )
 
   if (msg.role === 'assistant' && toolCalls.length > 0) {
     return [
@@ -261,9 +254,7 @@ function buildOpenRouterMessage(msg: Message): OpenRouterMessage[] {
   ]
 }
 
-export function buildOpenRouterTools(
-  tools: ToolDefinition[] | undefined,
-): OpenRouterToolDef[] {
+export function buildOpenRouterTools(tools: ToolDefinition[] | undefined): OpenRouterToolDef[] {
   if (!tools || tools.length === 0) return []
   return tools.map((t) => ({
     type: 'function',
@@ -286,13 +277,9 @@ export function buildOpenRouterBody(
     stream: true,
     max_tokens: options.maxTokens ?? 4096,
     stream_options: { include_usage: true },
-    ...(options.temperature !== undefined
-      ? { temperature: options.temperature }
-      : {}),
+    ...(options.temperature !== undefined ? { temperature: options.temperature } : {}),
     ...(tools.length > 0 ? { tools } : {}),
-    ...(fallbackModel !== undefined
-      ? { models: [options.model, fallbackModel] }
-      : {}),
+    ...(fallbackModel !== undefined ? { models: [options.model, fallbackModel] } : {}),
   }
 }
 
@@ -361,9 +348,7 @@ function* parseOpenRouterLines(
 
 function messageText(msg: Message): string {
   return msg.content
-    .flatMap((b) =>
-      b.type === 'text' || b.type === 'summary' ? [b.text] : [],
-    )
+    .flatMap((b) => (b.type === 'text' || b.type === 'summary' ? [b.text] : []))
     .join('\n')
 }
 

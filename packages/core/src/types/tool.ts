@@ -38,10 +38,7 @@ export interface ToolResult {
  * })
  * ```
  */
-export interface ToolDefinition<
-  TSchema extends z.ZodTypeAny = z.ZodTypeAny,
-  TOutput = unknown,
-> {
+export interface ToolDefinition<TSchema extends z.ZodTypeAny = z.ZodTypeAny, TOutput = unknown> {
   /** Unique name — used by the LLM to invoke this tool */
   name: string
   description: string

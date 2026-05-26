@@ -28,11 +28,7 @@ export type {
   PlanApprovalCallback,
 } from './types/agent.js'
 
-export type {
-  ChatSession,
-  BranchOptions,
-  StorageAdapter,
-} from './types/session.js'
+export type { ChatSession, BranchOptions, StorageAdapter } from './types/session.js'
 
 export type {
   ProviderConfig,

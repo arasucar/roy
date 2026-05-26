@@ -34,9 +34,10 @@ export interface PgSessionStoreConfig {
  * const roy = createChat({ agents, store })
  * ```
  */
-export class PgSessionStore<TInput = unknown, TOutput = unknown>
-  implements StorageAdapter<TInput, TOutput>
-{
+export class PgSessionStore<TInput = unknown, TOutput = unknown> implements StorageAdapter<
+  TInput,
+  TOutput
+> {
   private pool: import('pg').Pool | null = null
   private readonly tableName: string
   private readonly connectionString: string
@@ -99,10 +100,7 @@ export class PgSessionStore<TInput = unknown, TOutput = unknown>
 
   async load(sessionId: string): Promise<ChatSession<TInput, TOutput> | undefined> {
     const pool = await this.getPool()
-    const result = await pool.query(
-      `SELECT data FROM ${this.tableName} WHERE id = $1`,
-      [sessionId],
-    )
+    const result = await pool.query(`SELECT data FROM ${this.tableName} WHERE id = $1`, [sessionId])
     if (!result.rows[0]) return undefined
     return result.rows[0].data as ChatSession<TInput, TOutput>
   }
@@ -114,9 +112,7 @@ export class PgSessionStore<TInput = unknown, TOutput = unknown>
           `SELECT data FROM ${this.tableName} WHERE agent_id = $1 ORDER BY updated_at DESC`,
           [agentId],
         )
-      : await pool.query(
-          `SELECT data FROM ${this.tableName} ORDER BY updated_at DESC`,
-        )
+      : await pool.query(`SELECT data FROM ${this.tableName} ORDER BY updated_at DESC`)
     return result.rows.map((r) => r.data as ChatSession<TInput, TOutput>)
   }
 
@@ -223,10 +219,9 @@ export class PgMemoryStore implements MemoryStorageAdapter {
 
   async getSlot(slotName: string): Promise<MemoryEntry | undefined> {
     const pool = await this.getPool()
-    const result = await pool.query(
-      `SELECT * FROM ${this.tableName} WHERE slot_name = $1`,
-      [slotName],
-    )
+    const result = await pool.query(`SELECT * FROM ${this.tableName} WHERE slot_name = $1`, [
+      slotName,
+    ])
     if (!result.rows[0]) return undefined
     const row = result.rows[0]
     return {

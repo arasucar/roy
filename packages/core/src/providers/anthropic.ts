@@ -63,10 +63,7 @@ export class AnthropicProvider implements LLMProvider {
     )
 
     const tools = buildAnthropicTools(options.tools, this.enableCaching)
-    const system = buildAnthropicSystem(
-      options.systemPrompt,
-      this.enableCaching,
-    )
+    const system = buildAnthropicSystem(options.systemPrompt, this.enableCaching)
 
     let promptTokens = 0
     let completionTokens = 0
@@ -81,9 +78,7 @@ export class AnthropicProvider implements LLMProvider {
       max_tokens: options.maxTokens ?? 4096,
       ...(system !== undefined ? { system } : {}),
       ...(tools.length > 0 ? { tools } : {}),
-      ...(options.temperature !== undefined
-        ? { temperature: options.temperature }
-        : {}),
+      ...(options.temperature !== undefined ? { temperature: options.temperature } : {}),
     })
 
     if (options.signal) {
@@ -104,10 +99,7 @@ export class AnthropicProvider implements LLMProvider {
         cacheReadInputTokens = u.cache_read_input_tokens ?? 0
       }
 
-      for (const mapped of mapAnthropicStreamEvent(
-        event as AnthropicStreamEventLike,
-        toolState,
-      )) {
+      for (const mapped of mapAnthropicStreamEvent(event as AnthropicStreamEventLike, toolState)) {
         if (mapped.type === 'text') fullText += mapped.delta
         yield mapped
       }
@@ -141,9 +133,7 @@ export class AnthropicProvider implements LLMProvider {
   estimateTokens(messages: Message[], systemPrompt?: string): number {
     const text = [
       systemPrompt ?? '',
-      ...messages.map((m) =>
-        m.content.map((b) => ('text' in b ? b.text : '')).join(' '),
-      ),
+      ...messages.map((m) => m.content.map((b) => ('text' in b ? b.text : '')).join(' ')),
     ].join(' ')
     // ~4 chars per token heuristic
     return Math.ceil(text.length / 4)
@@ -178,10 +168,7 @@ interface AnthropicToolResultPart {
   cache_control?: { type: 'ephemeral' }
 }
 
-type AnthropicContentPart =
-  | AnthropicTextPart
-  | AnthropicToolUsePart
-  | AnthropicToolResultPart
+type AnthropicContentPart = AnthropicTextPart | AnthropicToolUsePart | AnthropicToolResultPart
 
 interface AnthropicMessage {
   role: 'user' | 'assistant'
@@ -318,9 +305,7 @@ export function buildAnthropicSystem(
   | undefined {
   if (!systemPrompt) return undefined
   if (!enableCaching) return systemPrompt
-  return [
-    { type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } },
-  ]
+  return [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }]
 }
 
 export function mapAnthropicStreamEvent(
@@ -329,10 +314,7 @@ export function mapAnthropicStreamEvent(
 ): StreamChunk[] {
   const out: StreamChunk[] = []
 
-  if (
-    event.type === 'content_block_start' &&
-    event.content_block?.type === 'tool_use'
-  ) {
+  if (event.type === 'content_block_start' && event.content_block?.type === 'tool_use') {
     const index = event.index ?? 0
     const state = toolState.get(index) ?? {}
     if (event.content_block.id !== undefined) state.id = event.content_block.id
@@ -345,10 +327,7 @@ export function mapAnthropicStreamEvent(
   if (event.type === 'content_block_delta') {
     if (event.delta?.type === 'text_delta' && event.delta.text) {
       out.push({ type: 'text', delta: event.delta.text })
-    } else if (
-      event.delta?.type === 'input_json_delta' &&
-      event.delta.partial_json
-    ) {
+    } else if (event.delta?.type === 'input_json_delta' && event.delta.partial_json) {
       const index = event.index ?? 0
       const state = toolState.get(index) ?? {}
       out.push({

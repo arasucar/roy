@@ -134,9 +134,7 @@ export class Roy extends EventEmitter<RoyEvents> {
    * }
    * ```
    */
-  async *send<TInput = string>(
-    options: SendOptions<TInput>,
-  ): AsyncIterable<StreamChunk> {
+  async *send<TInput = string>(options: SendOptions<TInput>): AsyncIterable<StreamChunk> {
     const agentId = options.agentId ?? this.defaultAgentId
     const agent = this.registry.get(agentId)
     const provider = this.orchestrator.getProvider(agent)
@@ -212,9 +210,7 @@ export class Roy extends EventEmitter<RoyEvents> {
       content: [
         {
           type: 'text',
-          text: typeof options.input === 'string'
-            ? options.input
-            : JSON.stringify(options.input),
+          text: typeof options.input === 'string' ? options.input : JSON.stringify(options.input),
         },
       ],
       input: options.input,
@@ -270,8 +266,7 @@ export class Roy extends EventEmitter<RoyEvents> {
         finalMessage = finalTurnMessage
         const turnMessages = chunk.messages ?? [chunk.message]
         const messagesToSave = turnMessages.map((message, index) => {
-          const isFinal =
-            message.id === chunk.message.id || index === turnMessages.length - 1
+          const isFinal = message.id === chunk.message.id || index === turnMessages.length - 1
           if (isFinal) return finalTurnMessage
           if (message.role === 'assistant' && message.agentId === undefined) {
             return { ...message, agentId }

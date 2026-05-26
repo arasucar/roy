@@ -31,11 +31,7 @@ const searchTool: ToolDefinition = {
 describe('buildOpenAIMessages', () => {
   it('puts system prompt first and maps non-assistant messages to user', () => {
     const out = buildOpenAIMessages(
-      [
-        msg('system', 'ignored system'),
-        msg('user', 'hello'),
-        msg('assistant', 'hi'),
-      ],
+      [msg('system', 'ignored system'), msg('user', 'hello'), msg('assistant', 'hi')],
       'be useful',
     )
     expect(out).toEqual([

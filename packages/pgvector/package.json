@@ -4,7 +4,10 @@
   "description": "Roy — pgvector storage + semantic compaction adapter.",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "files": ["dist", "src"],
+  "files": [
+    "dist",
+    "src"
+  ],
   "exports": {
     ".": {
       "import": "./dist/index.js",

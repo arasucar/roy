@@ -31,11 +31,7 @@ export interface SummaryContent {
   originalTokens: number
 }
 
-export type ContentBlock =
-  | TextContent
-  | ToolCallContent
-  | ToolResultContent
-  | SummaryContent
+export type ContentBlock = TextContent | ToolCallContent | ToolResultContent | SummaryContent
 
 // ─── Cost snapshot ────────────────────────────────────────────────────────────
 

@@ -158,10 +158,7 @@ describe('buildGeminiHistory', () => {
 
 describe('buildGeminiUserText', () => {
   it('uses the last non-system message text', () => {
-    const out = buildGeminiUserText([
-      msg('user', 'hello'),
-      msg('system', 'ignored'),
-    ])
+    const out = buildGeminiUserText([msg('user', 'hello'), msg('system', 'ignored')])
 
     expect(out).toBe('hello')
   })
