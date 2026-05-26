@@ -110,6 +110,7 @@ export class Orchestrator extends EventEmitter<OrchestratorEvents> {
       let fullText = ''
       let promptTokens = 0
       let completionTokens = 0
+      let doneChunk: Extract<StreamChunk, { type: 'done' }> | undefined
 
       for await (const chunk of this.streamProviderTurn({
         provider,
@@ -122,6 +123,10 @@ export class Orchestrator extends EventEmitter<OrchestratorEvents> {
         if (chunk.type === 'usage') {
           promptTokens += chunk.promptTokens
           completionTokens += chunk.completionTokens
+        }
+        if (chunk.type === 'done') {
+          doneChunk = chunk
+          continue
         }
         yield chunk
       }
@@ -137,13 +142,15 @@ export class Orchestrator extends EventEmitter<OrchestratorEvents> {
       }
 
       if (!planEngine.isExecuting) {
-        await planEngine.onAssistantMessage(assistantMsg)
-        if (planEngine.currentPlan?.status === 'pending_approval') {
-          this.emit('plan-ready', { plan: planEngine.currentPlan })
-        } else if (planEngine.currentPlan?.status === 'approved') {
-          this.emit('plan-approved', { plan: planEngine.currentPlan })
-        } else if (planEngine.currentPlan?.status === 'rejected') {
-          this.emit('plan-rejected', { plan: planEngine.currentPlan })
+        const readyPlan = await planEngine.onAssistantMessage(assistantMsg)
+        if (readyPlan?.status === 'pending_approval') {
+          this.emit('plan-ready', { plan: readyPlan })
+          const decidedPlan = await planEngine.requestApproval()
+          if (decidedPlan?.status === 'approved') {
+            this.emit('plan-approved', { plan: decidedPlan })
+          } else if (decidedPlan?.status === 'rejected') {
+            this.emit('plan-rejected', { plan: decidedPlan })
+          }
         }
       }
 
@@ -153,6 +160,11 @@ export class Orchestrator extends EventEmitter<OrchestratorEvents> {
         tokens: promptTokens + completionTokens,
         costUsd: assistantMsg.cost?.estimatedCostUsd ?? 0,
       })
+      yield {
+        type: 'done',
+        message: doneChunk?.message ?? assistantMsg,
+        ...(doneChunk?.messages !== undefined ? { messages: doneChunk.messages } : {}),
+      }
       return
     }
 

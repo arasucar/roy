@@ -4,6 +4,7 @@
   "description": "Roy — React UI components (shadcn/ui) for the Roy LLM chat library.",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "files": ["dist", "src"],
   "exports": {
     ".": {
       "import": "./dist/index.js",
@@ -13,6 +14,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch",
+    "prepack": "npm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

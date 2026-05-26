@@ -95,6 +95,10 @@ Return JSON only:`
         continue // skip malformed extractions
       }
 
+      const parsed = slotDef.schema.safeParse(extracted)
+      if (!parsed.success) continue
+      extracted = parsed.data
+
       // Merge into store
       const existing = await this.store.getSlot(slotName)
       const strategy = slotDef.mergeStrategy ?? 'replace'
@@ -103,7 +107,7 @@ Return JSON only:`
       let newValue: unknown
       if (strategy === 'replace' || !existing) {
         newValue = extracted
-      } else if (strategy === 'merge' && typeof extracted === 'object' && typeof existing.value === 'object') {
+      } else if (strategy === 'merge' && isRecord(extracted) && isRecord(existing.value)) {
         newValue = { ...(existing.value as object), ...(extracted as object) }
       } else if (strategy === 'append' && Array.isArray(existing.value) && Array.isArray(extracted)) {
         newValue = [...existing.value, ...extracted]
@@ -145,6 +149,10 @@ Return JSON only:`
     const tmpl = template ?? 'Relevant context from previous sessions:\n{{memory}}'
     return tmpl.replace('{{memory}}', memoryText)
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 // ─── In-memory store implementation ──────────────────────────────────────────

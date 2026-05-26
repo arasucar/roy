@@ -4,6 +4,7 @@
   "description": "Roy — TypeScript LLM chat library core. Multi-provider, rolling compaction, multi-agent, plan mode.",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "files": ["dist", "src"],
   "exports": {
     ".": {
       "import": "./dist/index.js",
@@ -17,14 +18,27 @@
       "import": "./dist/agents/index.js",
       "types": "./dist/agents/index.d.ts"
     },
+    "./context": {
+      "import": "./dist/context/index.js",
+      "types": "./dist/context/index.d.ts"
+    },
     "./cost": {
       "import": "./dist/cost/index.js",
       "types": "./dist/cost/index.d.ts"
+    },
+    "./session": {
+      "import": "./dist/session/index.js",
+      "types": "./dist/session/index.d.ts"
+    },
+    "./types": {
+      "import": "./dist/types/index.js",
+      "types": "./dist/types/index.d.ts"
     }
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch",
+    "prepack": "npm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"

@@ -82,10 +82,10 @@ export class PlanEngine {
    * If the assistant's response contains a signal that it's ready to plan
    * (detected via heuristic or explicit signal token), transition to drafting.
    */
-  async onAssistantMessage(message: Message): Promise<void> {
+  async onAssistantMessage(message: Message): Promise<PlanDocument | undefined> {
     this.gatheringMessages.push(message)
 
-    if (this.state !== 'gathering') return
+    if (this.state !== 'gathering') return undefined
 
     // Detect plan-ready signal: assistant says something like
     // "I have all the information I need" or includes [PLAN_READY]
@@ -105,8 +105,10 @@ export class PlanEngine {
 
     const isReady = signals.some((s) => text.includes(s))
     if (isReady) {
-      await this.transitionToDrafting()
+      return this.transitionToDrafting()
     }
+
+    return undefined
   }
 
   /**
@@ -189,15 +191,11 @@ export class PlanEngine {
     this.plan = plan
     this.state = 'pending_approval'
 
-    // Call the host's approval callback — updates this.plan and this.state in-place
-    await this.requestApproval()
-
-    // Return the updated plan (with approved/rejected status), not the stale pre-approval snapshot
-    return this.plan!
+    return plan
   }
 
-  private async requestApproval(): Promise<void> {
-    if (!this.plan) return
+  async requestApproval(): Promise<PlanDocument | undefined> {
+    if (!this.plan) return undefined
 
     const { approved, rejectionReason } = await this.onApproval(this.plan)
 
@@ -218,5 +216,7 @@ export class PlanEngine {
       // Go back to gathering so the agent can revise
       this.state = 'gathering'
     }
+
+    return this.plan
   }
 }
